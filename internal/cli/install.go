@@ -274,7 +274,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.file.directory=/traefik/dynamic"
+      - "--providers.file.filename=/traefik/dynamic/opencel.yml"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -419,7 +419,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.file.directory=/traefik/dynamic"
+      - "--providers.file.filename=/traefik/dynamic/opencel.yml"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--api.dashboard=true"
@@ -559,7 +559,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.file.directory=/traefik/dynamic"
+      - "--providers.file.filename=/traefik/dynamic/opencel.yml"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -714,7 +714,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.file.directory=/traefik/dynamic"
+      - "--providers.file.filename=/traefik/dynamic/opencel.yml"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--api.dashboard=true"
