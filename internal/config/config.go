@@ -84,9 +84,13 @@ func FromEnv() (*Config, error) {
 	if c.GitHubPrivateKeyPEM == "" && c.GitHubPrivateKeyPath != "" {
 		b, err := os.ReadFile(c.GitHubPrivateKeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("read OPENCEL_GITHUB_PRIVATE_KEY_PATH: %w", err)
+			// Only fail if GitHub is configured (otherwise allow the system to run without GitHub support).
+			if c.GitHubAppID != "" || c.GitHubWebhookSecret != "" {
+				return nil, fmt.Errorf("read OPENCEL_GITHUB_PRIVATE_KEY_PATH: %w", err)
+			}
+		} else {
+			c.GitHubPrivateKeyPEM = string(b)
 		}
-		c.GitHubPrivateKeyPEM = string(b)
 	}
 
 	if len(missing) > 0 {
