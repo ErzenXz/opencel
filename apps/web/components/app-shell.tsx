@@ -10,7 +10,7 @@ import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type Me = { id: string; email: string };
+export type Me = { id: string; email: string; is_instance_admin?: boolean };
 export type Org = { id: string; slug: string; name: string; role: string };
 
 const ORG_KEY = "opencel_org_id";
@@ -95,7 +95,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const nav = [
     { href: "/orgs", label: "Organizations" },
     { href: "/projects", label: "Projects" },
-    { href: "/settings", label: "Settings" }
+    { href: "/settings", label: "Settings" },
+    ...(me?.is_instance_admin ? [{ href: "/admin", label: "Admin" }] : [])
   ];
 
   return (

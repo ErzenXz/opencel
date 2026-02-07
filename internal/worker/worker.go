@@ -17,25 +17,23 @@ import (
 	"github.com/opencel/opencel/internal/config"
 	"github.com/opencel/opencel/internal/crypto/envcrypt"
 	"github.com/opencel/opencel/internal/db"
-	"github.com/opencel/opencel/internal/github"
+	"github.com/opencel/opencel/internal/integrations"
+	"github.com/opencel/opencel/internal/settings"
 )
 
 type Worker struct {
-	Cfg   *config.Config
-	Store *db.Store
-	GH    *github.App
+	Cfg        *config.Config
+	Store      *db.Store
+	GHProvider *integrations.GitHubAppProvider
 }
 
 func New(cfg *config.Config, store *db.Store) (*Worker, error) {
-	var ghApp *github.App
-	if cfg.GitHubAppID != "" && cfg.GitHubPrivateKeyPEM != "" {
-		a, err := github.NewApp(cfg.GitHubAppID, cfg.GitHubPrivateKeyPEM, cfg.GitHubWebhookSecret)
-		if err != nil {
-			return nil, err
-		}
-		ghApp = a
-	}
-	return &Worker{Cfg: cfg, Store: store, GH: ghApp}, nil
+	st := settings.New(store, cfg.EncryptKey)
+	return &Worker{
+		Cfg:        cfg,
+		Store:      store,
+		GHProvider: integrations.NewGitHubAppProvider(cfg, st),
+	}, nil
 }
 
 func (w *Worker) BuildAndDeploy(ctx context.Context, deploymentID string) error {
@@ -50,7 +48,11 @@ func (w *Worker) BuildAndDeploy(ctx context.Context, deploymentID string) error 
 	_ = w.Store.AddDeploymentEvent(ctx, d.ID, "BUILDING", "Build started")
 	_ = w.Store.UpdateDeployment(ctx, d.ID, "BUILDING", nil, nil, nil, nil)
 
-	if w.GH == nil {
+	gh, cfgd, err := w.GHProvider.Get(ctx)
+	if err != nil {
+		return w.fail(ctx, d.ID, fmt.Sprintf("GitHub config error: %v", err))
+	}
+	if !cfgd || gh == nil {
 		return w.fail(ctx, d.ID, "GitHub not configured")
 	}
 	if !p.GitHubInstallationID.Valid {
@@ -63,11 +65,11 @@ func (w *Worker) BuildAndDeploy(ctx context.Context, deploymentID string) error 
 	}
 	owner, repo := parts[0], parts[1]
 
-	token, err := w.GH.CreateInstallationToken(ctx, p.GitHubInstallationID.Int64)
+	token, err := gh.CreateInstallationToken(ctx, p.GitHubInstallationID.Int64)
 	if err != nil {
 		return w.fail(ctx, d.ID, fmt.Sprintf("GitHub token: %v", err))
 	}
-	zipb, err := w.GH.DownloadZipball(ctx, token, owner, repo, d.GitSHA)
+	zipb, err := gh.DownloadZipball(ctx, token, owner, repo, d.GitSHA)
 	if err != nil {
 		return w.fail(ctx, d.ID, fmt.Sprintf("GitHub zipball: %v", err))
 	}

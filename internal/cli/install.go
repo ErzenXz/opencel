@@ -605,6 +605,27 @@ services:
         condition: service_started
     networks: [opencel]
 
+  agent:
+    image: ${OPENCEL_IMAGE_REPO}/opencel-agent:latest
+    restart: unless-stopped
+    environment:
+      OPENCEL_DSN: ${OPENCEL_DSN}
+      OPENCEL_REDIS_ADDR: "redis:6379"
+      OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_INSTALL_DIR: "/opt/opencel"
+      OPENCEL_REPO_DIR: ""
+      OPENCEL_BIN: "/usr/local/bin/opencel"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/opt/opencel
+      - /usr/local/bin/opencel:/usr/local/bin/opencel:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [opencel]
+
   web:
     image: ${OPENCEL_IMAGE_REPO}/opencel-web:latest
     restart: unless-stopped
@@ -751,6 +772,27 @@ services:
         condition: service_healthy
       registry:
         condition: service_started
+    networks: [opencel]
+
+  agent:
+    image: ${OPENCEL_IMAGE_REPO}/opencel-agent:latest
+    restart: unless-stopped
+    environment:
+      OPENCEL_DSN: ${OPENCEL_DSN}
+      OPENCEL_REDIS_ADDR: "redis:6379"
+      OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_INSTALL_DIR: "/opt/opencel"
+      OPENCEL_REPO_DIR: ""
+      OPENCEL_BIN: "/usr/local/bin/opencel"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/opt/opencel
+      - /usr/local/bin/opencel:/usr/local/bin/opencel:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks: [opencel]
 
   web:
@@ -917,6 +959,30 @@ services:
         condition: service_started
     networks: [opencel]
 
+  agent:
+    build:
+      context: ${OPENCEL_REPO_DIR}
+      dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.agent
+    restart: unless-stopped
+    environment:
+      OPENCEL_DSN: ${OPENCEL_DSN}
+      OPENCEL_REDIS_ADDR: "redis:6379"
+      OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_INSTALL_DIR: "/opt/opencel"
+      OPENCEL_REPO_DIR: "/opt/opencel-src"
+      OPENCEL_BIN: "/usr/local/bin/opencel"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/opt/opencel
+      - ${OPENCEL_REPO_DIR}:/opt/opencel-src
+      - /usr/local/bin/opencel:/usr/local/bin/opencel:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [opencel]
+
   web:
     build:
       context: ${OPENCEL_REPO_DIR}
@@ -1074,6 +1140,30 @@ services:
         condition: service_healthy
       registry:
         condition: service_started
+    networks: [opencel]
+
+  agent:
+    build:
+      context: ${OPENCEL_REPO_DIR}
+      dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.agent
+    restart: unless-stopped
+    environment:
+      OPENCEL_DSN: ${OPENCEL_DSN}
+      OPENCEL_REDIS_ADDR: "redis:6379"
+      OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_INSTALL_DIR: "/opt/opencel"
+      OPENCEL_REPO_DIR: "/opt/opencel-src"
+      OPENCEL_BIN: "/usr/local/bin/opencel"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/opt/opencel
+      - ${OPENCEL_REPO_DIR}:/opt/opencel-src
+      - /usr/local/bin/opencel:/usr/local/bin/opencel:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks: [opencel]
 
   web:

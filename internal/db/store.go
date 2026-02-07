@@ -12,10 +12,11 @@ type Store struct {
 }
 
 type User struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	CreatedAt    time.Time
+	ID              string
+	Email           string
+	PasswordHash    string
+	IsInstanceAdmin bool
+	CreatedAt       time.Time
 }
 
 type Organization struct {
@@ -41,6 +42,12 @@ type Project struct {
 	GitHubDefaultBranch    sql.NullString
 	ProductionDeploymentID sql.NullString
 	CreatedAt              time.Time
+}
+
+type ProjectSettings struct {
+	ProjectID    string
+	SettingsJSON []byte
+	UpdatedAt    time.Time
 }
 
 type Deployment struct {
@@ -93,8 +100,8 @@ func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (*Us
 	err := s.DB.QueryRowContext(ctx, `
 		INSERT INTO users (email, password_hash)
 		VALUES ($1, $2)
-		RETURNING id, email, password_hash, created_at
-	`, email, passwordHash).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+		RETURNING id, email, password_hash, is_instance_admin, created_at
+	`, email, passwordHash).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsInstanceAdmin, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -104,10 +111,10 @@ func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (*Us
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT id, email, password_hash, created_at
+		SELECT id, email, password_hash, is_instance_admin, created_at
 		FROM users
 		WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsInstanceAdmin, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -120,10 +127,10 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error)
 func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	var u User
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT id, email, password_hash, created_at
+		SELECT id, email, password_hash, is_instance_admin, created_at
 		FROM users
 		WHERE id = $1
-	`, id).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	`, id).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsInstanceAdmin, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -131,6 +138,15 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 		return nil, err
 	}
 	return &u, nil
+}
+
+func (s *Store) SetInstanceAdmin(ctx context.Context, userID string, admin bool) error {
+	_, err := s.DB.ExecContext(ctx, `
+		UPDATE users
+		SET is_instance_admin = $2
+		WHERE id = $1
+	`, userID, admin)
+	return err
 }
 
 func (s *Store) CreateOrganization(ctx context.Context, slug, name string) (*Organization, error) {
@@ -569,6 +585,30 @@ func (s *Store) ListEnvVars(ctx context.Context, projectID string, scope string)
 	return out, rows.Err()
 }
 
+func (s *Store) UpsertProjectSettingsJSON(ctx context.Context, projectID string, settingsJSON []byte) error {
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO project_settings (project_id, settings_json, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (project_id) DO UPDATE
+		SET settings_json = EXCLUDED.settings_json,
+		    updated_at = now()
+	`, projectID, settingsJSON)
+	return err
+}
+
+func (s *Store) GetProjectSettingsJSON(ctx context.Context, projectID string) ([]byte, error) {
+	var b []byte
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT settings_json
+		FROM project_settings
+		WHERE project_id = $1
+	`, projectID).Scan(&b)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return b, err
+}
+
 func nullString(v string) any {
 	if v == "" {
 		return nil
@@ -591,4 +631,201 @@ func nullIntPtr(p *int) any {
 		return nil
 	}
 	return *p
+}
+
+// ---- GitHub OAuth + identities ----
+
+type UserIdentity struct {
+	ID             string
+	UserID         string
+	Provider       string
+	ProviderUserID string
+	ProviderLogin  string
+	CreatedAt      time.Time
+}
+
+func (s *Store) UpsertUserIdentity(ctx context.Context, userID, provider, providerUserID, providerLogin string) (*UserIdentity, error) {
+	var out UserIdentity
+	err := s.DB.QueryRowContext(ctx, `
+		INSERT INTO user_identities (user_id, provider, provider_user_id, provider_login)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (provider, provider_user_id) DO UPDATE
+		SET user_id = EXCLUDED.user_id,
+		    provider_login = EXCLUDED.provider_login
+		RETURNING id, user_id, provider, provider_user_id, provider_login, created_at
+	`, userID, provider, providerUserID, providerLogin).Scan(&out.ID, &out.UserID, &out.Provider, &out.ProviderUserID, &out.ProviderLogin, &out.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Store) GetUserIdentity(ctx context.Context, provider, providerUserID string) (*UserIdentity, error) {
+	var out UserIdentity
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT id, user_id, provider, provider_user_id, provider_login, created_at
+		FROM user_identities
+		WHERE provider = $1 AND provider_user_id = $2
+	`, provider, providerUserID).Scan(&out.ID, &out.UserID, &out.Provider, &out.ProviderUserID, &out.ProviderLogin, &out.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+type GitHubOAuthToken struct {
+	UserID         string
+	AccessTokenEnc []byte
+	Scopes         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (s *Store) UpsertGitHubOAuthToken(ctx context.Context, userID string, accessTokenEnc []byte, scopes string) error {
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO github_oauth_tokens (user_id, access_token_enc, scopes, created_at, updated_at)
+		VALUES ($1, $2, $3, now(), now())
+		ON CONFLICT (user_id) DO UPDATE
+		SET access_token_enc = EXCLUDED.access_token_enc,
+		    scopes = EXCLUDED.scopes,
+		    updated_at = now()
+	`, userID, accessTokenEnc, scopes)
+	return err
+}
+
+func (s *Store) GetGitHubOAuthToken(ctx context.Context, userID string) (*GitHubOAuthToken, error) {
+	var t GitHubOAuthToken
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT user_id, access_token_enc, scopes, created_at, updated_at
+		FROM github_oauth_tokens
+		WHERE user_id = $1
+	`, userID).Scan(&t.UserID, &t.AccessTokenEnc, &t.Scopes, &t.CreatedAt, &t.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (s *Store) DeleteGitHubOAuthToken(ctx context.Context, userID string) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM github_oauth_tokens WHERE user_id = $1`, userID)
+	return err
+}
+
+// ---- Admin jobs (agent) ----
+
+type AdminJob struct {
+	ID              string
+	Type            string
+	Status          string
+	CreatedByUserID sql.NullString
+	CreatedAt       time.Time
+	StartedAt       sql.NullTime
+	FinishedAt      sql.NullTime
+	Error           sql.NullString
+}
+
+func (s *Store) CreateAdminJob(ctx context.Context, typ string, createdByUserID *string) (*AdminJob, error) {
+	var j AdminJob
+	err := s.DB.QueryRowContext(ctx, `
+		INSERT INTO admin_jobs (type, status, created_by_user_id)
+		VALUES ($1, 'queued', $2)
+		RETURNING id, type, status, created_by_user_id, created_at, started_at, finished_at, error
+	`, typ, nullStringPtr(createdByUserID)).Scan(&j.ID, &j.Type, &j.Status, &j.CreatedByUserID, &j.CreatedAt, &j.StartedAt, &j.FinishedAt, &j.Error)
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+func (s *Store) SetAdminJobStatus(ctx context.Context, jobID, status string, errMsg *string) error {
+	switch status {
+	case "running":
+		_, err := s.DB.ExecContext(ctx, `
+			UPDATE admin_jobs
+			SET status = $2, started_at = COALESCE(started_at, now()), error = $3
+			WHERE id = $1
+		`, jobID, status, nullStringPtr(errMsg))
+		return err
+	case "success", "failed":
+		_, err := s.DB.ExecContext(ctx, `
+			UPDATE admin_jobs
+			SET status = $2, finished_at = now(), error = $3
+			WHERE id = $1
+		`, jobID, status, nullStringPtr(errMsg))
+		return err
+	default:
+		_, err := s.DB.ExecContext(ctx, `
+			UPDATE admin_jobs
+			SET status = $2, error = $3
+			WHERE id = $1
+		`, jobID, status, nullStringPtr(errMsg))
+		return err
+	}
+}
+
+func (s *Store) AppendAdminJobLog(ctx context.Context, jobID, stream, chunk string) error {
+	if stream == "" {
+		stream = "system"
+	}
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO admin_job_logs (job_id, stream, chunk)
+		VALUES ($1, $2, $3)
+	`, jobID, stream, chunk)
+	return err
+}
+
+type AdminJobLog struct {
+	ID     int64
+	JobID  string
+	TS     time.Time
+	Stream string
+	Chunk  string
+}
+
+func (s *Store) GetAdminJob(ctx context.Context, jobID string) (*AdminJob, error) {
+	var j AdminJob
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT id, type, status, created_by_user_id, created_at, started_at, finished_at, error
+		FROM admin_jobs
+		WHERE id = $1
+	`, jobID).Scan(&j.ID, &j.Type, &j.Status, &j.CreatedByUserID, &j.CreatedAt, &j.StartedAt, &j.FinishedAt, &j.Error)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+func (s *Store) ListAdminJobLogs(ctx context.Context, jobID string, limit int) ([]AdminJobLog, error) {
+	if limit <= 0 || limit > 2000 {
+		limit = 500
+	}
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, job_id, ts, stream, chunk
+		FROM admin_job_logs
+		WHERE job_id = $1
+		ORDER BY id ASC
+		LIMIT $2
+	`, jobID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminJobLog
+	for rows.Next() {
+		var l AdminJobLog
+		if err := rows.Scan(&l.ID, &l.JobID, &l.TS, &l.Stream, &l.Chunk); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }

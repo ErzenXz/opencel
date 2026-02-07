@@ -7,17 +7,25 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
-  const [gh, setGh] = useState<{ configured: boolean; app_id?: string } | null>(null);
+  const [ghApp, setGhApp] = useState<{ configured: boolean; app_id?: string } | null>(null);
+  const [ghMe, setGhMe] = useState<{ connected: boolean; scopes?: string } | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const st = (await apiFetch("/api/integrations/github/status")) as any;
-        setGh(st);
+        const st = (await apiFetch("/api/integrations/github/app/status")) as any;
+        setGhApp(st);
       } catch (e: any) {
         toast.error(String(e?.message || e));
+      }
+      try {
+        const me = (await apiFetch("/api/github/me")) as any;
+        setGhMe(me);
+      } catch {
+        setGhMe({ connected: false });
       }
     })();
   }, []);
@@ -35,12 +43,35 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>GitHub</CardTitle>
-          <CardDescription>OpenCel uses a GitHub App for installation tokens and webhook verification.</CardDescription>
+          <CardDescription>Connect your GitHub account for repo import. Instance-level App config lives in Admin.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
-            {gh?.configured ? <Badge variant="secondary">Configured</Badge> : <Badge variant="outline">Not configured</Badge>}
-            {gh?.app_id ? <span className="text-sm text-muted-foreground">App ID: {gh.app_id}</span> : null}
+            {ghMe?.connected ? <Badge variant="secondary">OAuth connected</Badge> : <Badge variant="outline">OAuth not connected</Badge>}
+            {ghMe?.connected && ghMe?.scopes ? <span className="text-sm text-muted-foreground">Scopes: {ghMe.scopes}</span> : null}
+            <div className="ml-auto">
+              {ghMe?.connected ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await apiFetch("/api/auth/github/disconnect", { method: "POST", body: "{}" });
+                      toast.success("Disconnected GitHub");
+                      setGhMe({ connected: false });
+                    } catch (e: any) {
+                      toast.error(String(e?.message || e));
+                    }
+                  }}
+                >
+                  Disconnect
+                </Button>
+              ) : (
+                <Button asChild size="sm">
+                  <a href="/api/auth/github/start?return_to=/settings">Connect</a>
+                </Button>
+              )}
+            </div>
           </div>
 
           <Separator />
@@ -57,11 +88,19 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <div className="text-sm font-medium">Server secrets location</div>
             <div className="rounded-lg border bg-muted/30 p-3 font-mono text-xs break-all">/opt/opencel/secrets/github_app_private_key.pem</div>
-            <div className="text-xs text-muted-foreground">Set App ID and webhook secret in <span className="font-mono">/opt/opencel/.env</span>, then restart api/worker.</div>
+            <div className="text-xs text-muted-foreground">
+              Configure App ID, webhook secret, and private key in <span className="font-mono">Admin</span>, then click <span className="font-mono">Apply</span>.
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center gap-2">
+            {ghApp?.configured ? <Badge variant="secondary">App configured</Badge> : <Badge variant="outline">App not configured</Badge>}
+            {ghApp?.app_id ? <span className="text-sm text-muted-foreground">App ID: {ghApp.app_id}</span> : null}
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
-

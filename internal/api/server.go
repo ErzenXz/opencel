@@ -10,33 +10,28 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/opencel/opencel/internal/config"
 	"github.com/opencel/opencel/internal/db"
-	"github.com/opencel/opencel/internal/github"
+	"github.com/opencel/opencel/internal/integrations"
+	"github.com/opencel/opencel/internal/settings"
 )
 
 type Server struct {
-	Cfg   *config.Config
-	Store *db.Store
-	Queue *asynq.Client
-	GH    *github.App
+	Cfg        *config.Config
+	Store      *db.Store
+	Settings   *settings.Store
+	Queue      *asynq.Client
+	GHProvider *integrations.GitHubAppProvider
 
 	Router http.Handler
 }
 
 func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
-	var ghApp *github.App
-	if cfg.GitHubAppID != "" && cfg.GitHubPrivateKeyPEM != "" {
-		a, err := github.NewApp(cfg.GitHubAppID, cfg.GitHubPrivateKeyPEM, cfg.GitHubWebhookSecret)
-		if err != nil {
-			return nil, err
-		}
-		ghApp = a
-	}
-
+	st := settings.New(store, cfg.EncryptKey)
 	s := &Server{
-		Cfg:   cfg,
-		Store: store,
-		Queue: asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisAddr}),
-		GH:    ghApp,
+		Cfg:        cfg,
+		Store:      store,
+		Settings:   st,
+		Queue:      asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisAddr}),
+		GHProvider: integrations.NewGitHubAppProvider(cfg, st),
 	}
 
 	r := chi.NewRouter()
@@ -72,13 +67,32 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 		})
 		r.Get("/setup/status", s.handleSetupStatus)
 		r.Post("/setup", s.handleSetup)
-		r.Get("/integrations/github/status", s.handleGitHubStatus)
+		r.Get("/integrations/github/status", s.handleGitHubStatus) // compat
+		r.Get("/integrations/github/app/status", s.handleGitHubAppStatus)
+		r.Get("/integrations/github/app/install-url", s.handleGitHubAppInstallURL)
 		r.Post("/auth/login", s.handleLogin)
 		r.Post("/auth/logout", s.handleLogout)
+		r.Get("/auth/github/status", s.handleGitHubOAuthStatus)
+		r.Get("/auth/github/start", s.handleGitHubOAuthStart)
+		r.Get("/auth/github/callback", s.handleGitHubOAuthCallback)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 			r.Get("/me", s.handleMe)
+
+			r.Get("/github/me", s.handleGitHubMe)
+			r.Get("/github/repos", s.handleGitHubRepos)
+			r.Post("/auth/github/disconnect", s.handleGitHubDisconnect)
+
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(s.requireInstanceAdminMiddleware)
+				r.Get("/settings", s.handleAdminGetSettings)
+				r.Put("/settings", s.handleAdminPutSettings)
+				r.Post("/apply", s.handleAdminApply)
+				r.Post("/self-update", s.handleAdminSelfUpdate)
+				r.Get("/jobs/{jobID}", s.handleAdminGetJob)
+				r.Get("/jobs/{jobID}/logs", s.handleAdminGetJobLogs)
+			})
 
 			r.Get("/orgs", s.handleListOrgs)
 			r.Post("/orgs", s.handleCreateOrg)
@@ -88,6 +102,7 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 			r.Delete("/orgs/{orgID}/members/{userID}", s.handleRemoveOrgMember)
 
 			r.Post("/orgs/{orgID}/projects", s.handleCreateProjectInOrg)
+			r.Post("/orgs/{orgID}/projects/import", s.handleImportProjectInOrg)
 			r.Get("/orgs/{orgID}/projects", s.handleListProjectsInOrg)
 			r.Get("/orgs/{orgID}/projects/{id}", s.handleGetProjectInOrg)
 

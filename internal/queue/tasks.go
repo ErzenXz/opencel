@@ -5,11 +5,17 @@ import (
 )
 
 const (
-	TaskBuildDeploy = "build_deploy"
+	TaskBuildDeploy   = "build_deploy"
+	TaskApplySettings = "apply_settings"
+	TaskSelfUpdate    = "self_update"
 )
 
 type BuildDeployPayload struct {
 	DeploymentID string `json:"deployment_id"`
+}
+
+type AdminJobPayload struct {
+	JobID string `json:"job_id"`
 }
 
 func MustJSON(v any) []byte {
@@ -19,4 +25,3 @@ func MustJSON(v any) []byte {
 	}
 	return b
 }
-

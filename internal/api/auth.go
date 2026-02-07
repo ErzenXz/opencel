@@ -25,8 +25,9 @@ type loginReq struct {
 }
 
 type meResp struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID              string `json:"id"`
+	Email           string `json:"email"`
+	IsInstanceAdmin bool   `json:"is_instance_admin"`
 }
 
 func BootstrapAdmin(ctx context.Context, store *db.Store, email, password string) error {
@@ -119,7 +120,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
 		return
 	}
-	writeJSON(w, 200, meResp{ID: u.ID, Email: u.Email})
+	writeJSON(w, 200, meResp{ID: u.ID, Email: u.Email, IsInstanceAdmin: u.IsInstanceAdmin})
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {

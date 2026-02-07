@@ -23,7 +23,12 @@ type ghPushPayload struct {
 }
 
 func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
-	if s.GH == nil {
+	gh, cfgd, err := s.GHProvider.Get(r.Context())
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": "github config error"})
+		return
+	}
+	if !cfgd || gh == nil {
 		writeJSON(w, 400, map[string]any{"error": "github not configured"})
 		return
 	}
@@ -32,7 +37,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": "invalid body"})
 		return
 	}
-	if err := github.VerifyWebhookSignature(r, s.Cfg.GitHubWebhookSecret, body); err != nil {
+	if err := github.VerifyWebhookSignature(r, gh.WebhookSecret, body); err != nil {
 		writeJSON(w, 401, map[string]any{"error": "invalid signature"})
 		return
 	}
@@ -64,24 +69,9 @@ func (s *Server) handleGitHubPush(w http.ResponseWriter, r *http.Request, body [
 		return
 	}
 	if project == nil {
-		// auto-create to allow "push to deploy" with only webhook wiring.
-		org, err := s.Store.FirstOrganization(r.Context())
-		if err != nil {
-			writeJSON(w, 500, map[string]any{"error": err.Error()})
-			return
-		}
-		if org == nil {
-			writeJSON(w, 400, map[string]any{"error": "no org exists (complete setup first)"})
-			return
-		}
-		slug := strings.ToLower(strings.ReplaceAll(strings.Split(repoFull, "/")[1], "_", "-"))
-		def := p.Repository.DefaultBranch
-		inst := p.Installation.ID
-		project, err = s.Store.CreateProject(r.Context(), org.ID, slug, repoFull, &inst, &def)
-		if err != nil {
-			writeJSON(w, 500, map[string]any{"error": err.Error()})
-			return
-		}
+		// Do not auto-create projects by default in M3. The dashboard import flow owns creation.
+		writeJSON(w, 200, map[string]any{"ok": true, "ignored": true, "reason": "no project mapped for repo"})
+		return
 	} else {
 		_ = s.Store.UpdateProjectGitHubInfo(r.Context(), project.ID, p.Installation.ID, p.Repository.DefaultBranch)
 	}

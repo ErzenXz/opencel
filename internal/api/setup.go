@@ -108,8 +108,8 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	// Create user.
 	var userID string
 	if err := tx.QueryRowContext(r.Context(), `
-		INSERT INTO users (email, password_hash)
-		VALUES ($1, $2)
+		INSERT INTO users (email, password_hash, is_instance_admin)
+		VALUES ($1, $2, true)
 		RETURNING id
 	`, req.Email, string(hash)).Scan(&userID); err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
@@ -167,7 +167,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, 201, setupResp{
 		OK:    true,
-		User:  meResp{ID: userID, Email: req.Email},
+		User:  meResp{ID: userID, Email: req.Email, IsInstanceAdmin: true},
 		OrgID: orgID,
 		At:    time.Now(),
 	})

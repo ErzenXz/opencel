@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [gh, setGh] = useState<{ configured: boolean } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -31,6 +32,12 @@ export default function LoginPage() {
         router.replace("/projects");
       } catch {
         // ignore
+      }
+      try {
+        const st = (await apiFetch("/api/auth/github/status")) as any;
+        setGh(st);
+      } catch {
+        setGh({ configured: false });
       }
     })();
   }, [router]);
@@ -56,6 +63,11 @@ export default function LoginPage() {
           <CardDescription>Sign in to your OpenCel dashboard.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {gh?.configured ? (
+            <Button asChild variant="secondary" className="w-full">
+              <a href="/api/auth/github/start?return_to=/projects">Continue with GitHub</a>
+            </Button>
+          ) : null}
           <div className="space-y-2">
             <div className="text-sm font-medium">Email</div>
             <Input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
@@ -72,4 +84,3 @@ export default function LoginPage() {
     </main>
   );
 }
-

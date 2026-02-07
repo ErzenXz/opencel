@@ -85,48 +85,53 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
           <p className="text-sm text-muted-foreground">Connect a GitHub repo and deploy on push.</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button>Create project</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create project</DialogTitle>
-              <DialogDescription>Projects are scoped to the selected organization.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Slug</div>
-                <Input placeholder="my-app" value={slug} onChange={(e) => setSlug(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm font-medium">GitHub repo</div>
-                <Input placeholder="owner/repo" value={repo} onChange={(e) => setRepo(e.target.value)} />
-                <div className="text-xs text-muted-foreground">
-                  {gh?.configured ? (
-                    <span>GitHub App configured.</span>
-                  ) : (
-                    <span>
-                      GitHub App not configured yet. You can create the project now, but deploy-on-push won&apos;t work until you configure it in{" "}
-                      <Link href="/settings" className="underline">
-                        Settings
-                      </Link>
-                      .
-                    </span>
-                  )}
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/import">Import</Link>
+          </Button>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button>Create project</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create project</DialogTitle>
+                <DialogDescription>Projects are scoped to the selected organization.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Slug</div>
+                  <Input placeholder="my-app" value={slug} onChange={(e) => setSlug(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">GitHub repo</div>
+                  <Input placeholder="owner/repo" value={repo} onChange={(e) => setRepo(e.target.value)} />
+                  <div className="text-xs text-muted-foreground">
+                    {gh?.configured ? (
+                      <span>GitHub App configured.</span>
+                    ) : (
+                      <span>
+                        GitHub App not configured yet. You can create the project now, but deploy-on-push won&apos;t work until you configure it in{" "}
+                        <Link href="/admin" className="underline">
+                          Admin
+                        </Link>
+                        .
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={onCreate} disabled={!slug || !repo}>
-                Create
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={onCreate} disabled={!slug || !repo}>
+                  Create
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
@@ -177,4 +182,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-

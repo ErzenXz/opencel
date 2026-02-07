@@ -77,24 +77,34 @@ func (s *Server) handleCreateProjectWithOrg(w http.ResponseWriter, r *http.Reque
 
 	var installationID *int64
 	var defaultBranch *string
-	if s.GH != nil {
-		inst, err := s.GH.GetRepoInstallation(r.Context(), owner, repo)
+	if s.GHProvider != nil {
+		gh, cfgd, err := s.GHProvider.Get(r.Context())
 		if err != nil {
-			writeJSON(w, 400, map[string]any{"error": fmt.Sprintf("github installation lookup failed: %v", err)})
+			writeJSON(w, 500, map[string]any{"error": fmt.Sprintf("github config error: %v", err)})
 			return
 		}
-		installationID = &inst.ID
-		token, err := s.GH.CreateInstallationToken(r.Context(), inst.ID)
-		if err != nil {
-			writeJSON(w, 400, map[string]any{"error": fmt.Sprintf("github installation token failed: %v", err)})
-			return
+		if cfgd && gh != nil {
+			inst, err := gh.GetRepoInstallation(r.Context(), owner, repo)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": fmt.Sprintf("github installation lookup failed: %v", err)})
+				return
+			}
+			installationID = &inst.ID
+			token, err := gh.CreateInstallationToken(r.Context(), inst.ID)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": fmt.Sprintf("github installation token failed: %v", err)})
+				return
+			}
+			repoInfo, err := gh.GetRepo(r.Context(), token, owner, repo)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": fmt.Sprintf("github repo lookup failed: %v", err)})
+				return
+			}
+			defaultBranch = &repoInfo.DefaultBranch
 		}
-		repoInfo, err := s.GH.GetRepo(r.Context(), token, owner, repo)
-		if err != nil {
-			writeJSON(w, 400, map[string]any{"error": fmt.Sprintf("github repo lookup failed: %v", err)})
-			return
-		}
-		defaultBranch = &repoInfo.DefaultBranch
+	}
+	if installationID == nil && defaultBranch == nil && false {
+		// placeholder for future oauth-only verification
 	}
 
 	p, err := s.Store.CreateProject(r.Context(), orgID, req.Slug, req.RepoFullName, installationID, defaultBranch)
