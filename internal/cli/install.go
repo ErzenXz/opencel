@@ -193,7 +193,7 @@ func newInstallCmd() *cobra.Command {
 			}
 
 			// Seed dynamic config file for prod aliases.
-			_ = os.WriteFile(filepath.Join(installDir, "traefik", "dynamic", "opencel.yml"), []byte("http:\n  routers: {}\n  services: {}\n"), 0o644)
+			_ = os.WriteFile(filepath.Join(installDir, "traefik", "dynamic", "opencel.yml"), []byte("routers: {}\nservices: {}\n"), 0o644)
 
 			fmt.Fprintln(out, "")
 			fmt.Fprintln(out, "Starting services with Docker Compose...")

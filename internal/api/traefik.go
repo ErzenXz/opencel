@@ -11,10 +11,9 @@ import (
 )
 
 type traefikDynamic struct {
-	HTTP traefikHTTP `yaml:"http"`
-}
-
-type traefikHTTP struct {
+	// Traefik v3.6+ file provider can load HTTP config directly from a file when using providers.file.filename.
+	// In that mode, the file should contain `routers:` and `services:` at the root (no `http:` wrapper).
+	// This struct matches dynamic.HTTPConfiguration.
 	Routers  map[string]traefikRouter  `yaml:"routers"`
 	Services map[string]traefikService `yaml:"services"`
 }
@@ -45,10 +44,8 @@ func (s *Server) writeTraefikProdRoute(ctx context.Context, _ string) error {
 	}
 
 	dyn := traefikDynamic{
-		HTTP: traefikHTTP{
-			Routers:  map[string]traefikRouter{},
-			Services: map[string]traefikService{},
-		},
+		Routers:  map[string]traefikRouter{},
+		Services: map[string]traefikService{},
 	}
 
 	for _, p := range projects {
@@ -75,8 +72,8 @@ func (s *Server) writeTraefikProdRoute(ctx context.Context, _ string) error {
 		if s.Cfg.TraefikTLS {
 			rt.TLS = map[string]any{}
 		}
-		dyn.HTTP.Routers[routerName] = rt
-		dyn.HTTP.Services[serviceName] = traefikService{
+		dyn.Routers[routerName] = rt
+		dyn.Services[serviceName] = traefikService{
 			LoadBalancer: traefikLB{
 				Servers: []traefikServer{
 					{URL: fmt.Sprintf("http://%s:%d", d.ContainerName.String, d.ServicePort)},
