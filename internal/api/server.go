@@ -70,6 +70,9 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 			w.WriteHeader(200)
 			_, _ = w.Write([]byte("ok"))
 		})
+		r.Get("/setup/status", s.handleSetupStatus)
+		r.Post("/setup", s.handleSetup)
+		r.Get("/integrations/github/status", s.handleGitHubStatus)
 		r.Post("/auth/login", s.handleLogin)
 		r.Post("/auth/logout", s.handleLogout)
 
@@ -77,6 +80,18 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 			r.Use(s.authMiddleware)
 			r.Get("/me", s.handleMe)
 
+			r.Get("/orgs", s.handleListOrgs)
+			r.Post("/orgs", s.handleCreateOrg)
+			r.Get("/orgs/{orgID}", s.handleGetOrg)
+			r.Get("/orgs/{orgID}/members", s.handleListOrgMembers)
+			r.Post("/orgs/{orgID}/members", s.handleAddOrgMember)
+			r.Delete("/orgs/{orgID}/members/{userID}", s.handleRemoveOrgMember)
+
+			r.Post("/orgs/{orgID}/projects", s.handleCreateProjectInOrg)
+			r.Get("/orgs/{orgID}/projects", s.handleListProjectsInOrg)
+			r.Get("/orgs/{orgID}/projects/{id}", s.handleGetProjectInOrg)
+
+			// Compatibility (deprecated): picks the first org the user belongs to.
 			r.Post("/projects", s.handleCreateProject)
 			r.Get("/projects", s.handleListProjects)
 			r.Get("/projects/{id}", s.handleGetProject)

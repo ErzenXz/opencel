@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,7 +16,47 @@ type createProjectReq struct {
 	RepoFullName string `json:"repo_full_name"` // owner/repo
 }
 
+func (s *Server) firstOrgIDForUser(ctx context.Context, userID string) (string, error) {
+	orgs, err := s.Store.ListOrganizationsByUser(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if len(orgs) == 0 {
+		return "", nil
+	}
+	return orgs[0].ID, nil
+}
+
+func (s *Server) handleCreateProjectInOrg(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID := chiURLParam(r, "orgID")
+	if err := s.requireOrgRole(r.Context(), uid, orgID, "admin"); err != nil {
+		writeJSON(w, err.status, map[string]any{"error": err.msg})
+		return
+	}
+	s.handleCreateProjectWithOrg(w, r, orgID)
+}
+
+// Compatibility (deprecated): uses the first org the user belongs to.
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID, err := s.firstOrgIDForUser(r.Context(), uid)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if orgID == "" {
+		writeJSON(w, 400, map[string]any{"error": "no org found (complete setup first)"})
+		return
+	}
+	if err := s.requireOrgRole(r.Context(), uid, orgID, "admin"); err != nil {
+		writeJSON(w, err.status, map[string]any{"error": err.msg})
+		return
+	}
+	s.handleCreateProjectWithOrg(w, r, orgID)
+}
+
+func (s *Server) handleCreateProjectWithOrg(w http.ResponseWriter, r *http.Request, orgID string) {
 	var req createProjectReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]any{"error": "invalid json"})
@@ -56,7 +97,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		defaultBranch = &repoInfo.DefaultBranch
 	}
 
-	p, err := s.Store.CreateProject(r.Context(), req.Slug, req.RepoFullName, installationID, defaultBranch)
+	p, err := s.Store.CreateProject(r.Context(), orgID, req.Slug, req.RepoFullName, installationID, defaultBranch)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
@@ -65,8 +106,14 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, resp)
 }
 
-func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
-	ps, err := s.Store.ListProjects(r.Context())
+func (s *Server) handleListProjectsInOrg(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID := chiURLParam(r, "orgID")
+	if err := s.requireOrgRole(r.Context(), uid, orgID, "member"); err != nil {
+		writeJSON(w, err.status, map[string]any{"error": err.msg})
+		return
+	}
+	ps, err := s.Store.ListProjectsByOrg(r.Context(), orgID)
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
@@ -79,7 +126,38 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
-func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
+// Compatibility (deprecated): uses the first org the user belongs to.
+func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID, err := s.firstOrgIDForUser(r.Context(), uid)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if orgID == "" {
+		writeJSON(w, 200, []any{})
+		return
+	}
+	ps, err := s.Store.ListProjectsByOrg(r.Context(), orgID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	out := make([]projectResp, 0, len(ps))
+	for i := range ps {
+		p := ps[i]
+		out = append(out, toProjectResp(&p))
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s *Server) handleGetProjectInOrg(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID := chiURLParam(r, "orgID")
+	if err := s.requireOrgRole(r.Context(), uid, orgID, "member"); err != nil {
+		writeJSON(w, err.status, map[string]any{"error": err.msg})
+		return
+	}
 	id := chiURLParam(r, "id")
 	p, err := s.Store.GetProject(r.Context(), id)
 	if err != nil {
@@ -88,6 +166,34 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if p == nil {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if p.OrgID != orgID {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	writeJSON(w, 200, toProjectResp(p))
+}
+
+func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	id := chiURLParam(r, "id")
+	p, err := s.Store.GetProject(r.Context(), id)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if p == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	ok, err := s.Store.IsUserOrgMember(r.Context(), uid, p.OrgID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if !ok {
+		writeJSON(w, 403, map[string]any{"error": "forbidden"})
 		return
 	}
 	writeJSON(w, 200, toProjectResp(p))

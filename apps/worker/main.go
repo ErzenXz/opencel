@@ -58,4 +58,3 @@ func main() {
 		log.Fatalf("asynq: %v", err)
 	}
 }
-

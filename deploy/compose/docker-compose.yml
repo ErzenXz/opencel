@@ -3,6 +3,7 @@ name: opencel
 services:
   traefik:
     image: traefik:v3
+    restart: unless-stopped
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -29,6 +30,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${OPENCEL_PG_USER:-opencel}
       POSTGRES_PASSWORD: ${OPENCEL_PG_PASSWORD:-opencel}
@@ -44,6 +46,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -53,6 +56,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OPENCEL_MINIO_USER:-opencel}
@@ -64,7 +68,8 @@ services:
   registry:
     image: registry:2
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
+    restart: unless-stopped
     volumes:
       - ./.data/registry:/var/lib/registry
     networks: [opencel]
@@ -73,13 +78,16 @@ services:
     build:
       context: ../..
       dockerfile: deploy/compose/Dockerfile.api
+    restart: unless-stopped
     environment:
       OPENCEL_HTTP_ADDR: ":8080"
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_JWT_SECRET: ${OPENCEL_JWT_SECRET}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -109,11 +117,14 @@ services:
     build:
       context: ../..
       dockerfile: deploy/compose/Dockerfile.worker
+    restart: unless-stopped
     environment:
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -135,6 +146,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/compose/Dockerfile.web
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_started

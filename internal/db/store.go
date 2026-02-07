@@ -18,14 +18,29 @@ type User struct {
 	CreatedAt    time.Time
 }
 
+type Organization struct {
+	ID        string
+	Slug      string
+	Name      string
+	CreatedAt time.Time
+}
+
+type OrgMembership struct {
+	OrgID     string
+	UserID    string
+	Role      string
+	CreatedAt time.Time
+}
+
 type Project struct {
-	ID                   string
-	Slug                 string
-	RepoFullName         string
-	GitHubInstallationID sql.NullInt64
-	GitHubDefaultBranch  sql.NullString
+	ID                     string
+	OrgID                  string
+	Slug                   string
+	RepoFullName           string
+	GitHubInstallationID   sql.NullInt64
+	GitHubDefaultBranch    sql.NullString
 	ProductionDeploymentID sql.NullString
-	CreatedAt            time.Time
+	CreatedAt              time.Time
 }
 
 type Deployment struct {
@@ -118,7 +133,139 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-func (s *Store) CreateProject(ctx context.Context, slug, repoFullName string, installationID *int64, defaultBranch *string) (*Project, error) {
+func (s *Store) CreateOrganization(ctx context.Context, slug, name string) (*Organization, error) {
+	var o Organization
+	err := s.DB.QueryRowContext(ctx, `
+		INSERT INTO organizations (slug, name)
+		VALUES ($1, $2)
+		RETURNING id, slug, name, created_at
+	`, slug, name).Scan(&o.ID, &o.Slug, &o.Name, &o.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (s *Store) GetOrganization(ctx context.Context, id string) (*Organization, error) {
+	var o Organization
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT id, slug, name, created_at
+		FROM organizations
+		WHERE id = $1
+	`, id).Scan(&o.ID, &o.Slug, &o.Name, &o.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (s *Store) ListOrganizationsByUser(ctx context.Context, userID string) ([]Organization, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT o.id, o.slug, o.name, o.created_at
+		FROM organizations o
+		JOIN organization_memberships m ON m.org_id = o.id
+		WHERE m.user_id = $1
+		ORDER BY o.created_at ASC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Organization
+	for rows.Next() {
+		var o Organization
+		if err := rows.Scan(&o.ID, &o.Slug, &o.Name, &o.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) AddOrgMember(ctx context.Context, orgID, userID, role string) error {
+	_, err := s.DB.ExecContext(ctx, `
+		INSERT INTO organization_memberships (org_id, user_id, role)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role
+	`, orgID, userID, role)
+	return err
+}
+
+func (s *Store) RemoveOrgMember(ctx context.Context, orgID, userID string) error {
+	_, err := s.DB.ExecContext(ctx, `
+		DELETE FROM organization_memberships
+		WHERE org_id = $1 AND user_id = $2
+	`, orgID, userID)
+	return err
+}
+
+func (s *Store) GetOrgMembership(ctx context.Context, orgID, userID string) (*OrgMembership, error) {
+	var m OrgMembership
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT org_id, user_id, role, created_at
+		FROM organization_memberships
+		WHERE org_id = $1 AND user_id = $2
+	`, orgID, userID).Scan(&m.OrgID, &m.UserID, &m.Role, &m.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+type OrgMemberRow struct {
+	UserID    string
+	Email     string
+	Role      string
+	CreatedAt time.Time
+}
+
+func (s *Store) ListOrgMembers(ctx context.Context, orgID string) ([]OrgMemberRow, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT u.id, u.email, m.role, m.created_at
+		FROM organization_memberships m
+		JOIN users u ON u.id = m.user_id
+		WHERE m.org_id = $1
+		ORDER BY m.created_at ASC
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OrgMemberRow
+	for rows.Next() {
+		var r OrgMemberRow
+		if err := rows.Scan(&r.UserID, &r.Email, &r.Role, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) FirstOrganization(ctx context.Context) (*Organization, error) {
+	var o Organization
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT id, slug, name, created_at
+		FROM organizations
+		ORDER BY created_at ASC
+		LIMIT 1
+	`).Scan(&o.ID, &o.Slug, &o.Name, &o.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (s *Store) CreateProject(ctx context.Context, orgID, slug, repoFullName string, installationID *int64, defaultBranch *string) (*Project, error) {
 	var p Project
 	var inst sql.NullInt64
 	var def sql.NullString
@@ -129,11 +276,11 @@ func (s *Store) CreateProject(ctx context.Context, slug, repoFullName string, in
 		def = sql.NullString{String: *defaultBranch, Valid: true}
 	}
 	err := s.DB.QueryRowContext(ctx, `
-		INSERT INTO projects (slug, repo_full_name, github_installation_id, github_default_branch)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
-	`, slug, repoFullName, inst, def).Scan(
-		&p.ID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt,
+		INSERT INTO projects (org_id, slug, repo_full_name, github_installation_id, github_default_branch)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, org_id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
+	`, orgID, slug, repoFullName, inst, def).Scan(
+		&p.ID, &p.OrgID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -141,9 +288,31 @@ func (s *Store) CreateProject(ctx context.Context, slug, repoFullName string, in
 	return &p, nil
 }
 
+func (s *Store) ListProjectsByOrg(ctx context.Context, orgID string) ([]Project, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, org_id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
+		FROM projects
+		WHERE org_id = $1
+		ORDER BY created_at DESC
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Project
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(&p.ID, &p.OrgID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
+		SELECT id, org_id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
 		FROM projects
 		ORDER BY created_at DESC
 	`)
@@ -154,7 +323,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.OrgID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -165,10 +334,10 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	var p Project
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
+		SELECT id, org_id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
 		FROM projects
 		WHERE id = $1
-	`, id).Scan(&p.ID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt)
+	`, id).Scan(&p.ID, &p.OrgID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -181,10 +350,10 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 func (s *Store) GetProjectByRepoFullName(ctx context.Context, repoFullName string) (*Project, error) {
 	var p Project
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
+		SELECT id, org_id, slug, repo_full_name, github_installation_id, github_default_branch, production_deployment_id, created_at
 		FROM projects
 		WHERE repo_full_name = $1
-	`, repoFullName).Scan(&p.ID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt)
+	`, repoFullName).Scan(&p.ID, &p.OrgID, &p.Slug, &p.RepoFullName, &p.GitHubInstallationID, &p.GitHubDefaultBranch, &p.ProductionDeploymentID, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -192,6 +361,33 @@ func (s *Store) GetProjectByRepoFullName(ctx context.Context, repoFullName strin
 		return nil, err
 	}
 	return &p, nil
+}
+
+func (s *Store) IsUserOrgMember(ctx context.Context, userID, orgID string) (bool, error) {
+	var n int
+	if err := s.DB.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM organization_memberships
+		WHERE org_id = $1 AND user_id = $2
+	`, orgID, userID).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func (s *Store) GetOrgRole(ctx context.Context, userID, orgID string) (string, error) {
+	var role string
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT role
+		FROM organization_memberships
+		WHERE org_id = $1 AND user_id = $2
+	`, orgID, userID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return role, nil
 }
 
 func (s *Store) CreateDeployment(ctx context.Context, projectID, gitSHA, gitRef, typ string) (*Deployment, error) {

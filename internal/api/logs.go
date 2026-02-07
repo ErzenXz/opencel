@@ -10,9 +10,28 @@ import (
 
 // SSE endpoint. Clients can pass ?after=<id> to resume.
 func (s *Server) handleDeploymentLogsSSE(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
 	id := chiURLParam(r, "id")
-	if _, err := s.Store.GetDeployment(r.Context(), id); err != nil {
+	d, err := s.Store.GetDeployment(r.Context(), id)
+	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if d == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	p, err := s.Store.GetProject(r.Context(), d.ProjectID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if p == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if herr := s.requireOrgRole(r.Context(), uid, p.OrgID, "member"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
 		return
 	}
 

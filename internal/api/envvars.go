@@ -22,7 +22,21 @@ type envVarResp struct {
 }
 
 func (s *Server) handleSetEnvVar(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
 	projectID := chiURLParam(r, "id")
+	p, err := s.Store.GetProject(r.Context(), projectID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if p == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if herr := s.requireOrgRole(r.Context(), uid, p.OrgID, "admin"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
 	var req envVarReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]any{"error": "invalid json"})
@@ -51,7 +65,21 @@ func (s *Server) handleSetEnvVar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListEnvVars(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
 	projectID := chiURLParam(r, "id")
+	p, err := s.Store.GetProject(r.Context(), projectID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if p == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if herr := s.requireOrgRole(r.Context(), uid, p.OrgID, "member"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
 	scope := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("scope")))
 	if scope != "" && scope != "preview" && scope != "production" {
 		writeJSON(w, 400, map[string]any{"error": "scope must be preview or production"})
@@ -68,4 +96,3 @@ func (s *Server) handleListEnvVars(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, out)
 }
-

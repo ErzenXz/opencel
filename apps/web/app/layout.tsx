@@ -1,5 +1,7 @@
 import "./globals.css";
 
+import { Sonner } from "@/components/ui/sonner";
+
 export const metadata = {
   title: "OpenCel",
   description: "Self-hosted Vercel-like deployments"
@@ -8,8 +10,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        {children}
+        <Sonner />
+      </body>
     </html>
   );
 }
-

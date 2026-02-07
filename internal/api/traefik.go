@@ -52,6 +52,10 @@ func (s *Server) writeTraefikProdRoute(ctx context.Context, _ string) error {
 		if !p.ProductionDeploymentID.Valid || p.ProductionDeploymentID.String == "" {
 			continue
 		}
+		org, err := s.Store.GetOrganization(ctx, p.OrgID)
+		if err != nil || org == nil {
+			continue
+		}
 		d, err := s.Store.GetDeployment(ctx, p.ProductionDeploymentID.String)
 		if err != nil || d == nil {
 			continue
@@ -60,9 +64,9 @@ func (s *Server) writeTraefikProdRoute(ctx context.Context, _ string) error {
 			continue
 		}
 
-		routerName := "prod-" + p.Slug
-		serviceName := "prod-" + p.Slug
-		host := fmt.Sprintf("%s.prod.%s", p.Slug, s.Cfg.BaseDomain)
+		routerName := "prod-" + org.Slug + "-" + p.Slug
+		serviceName := "prod-" + org.Slug + "-" + p.Slug
+		host := fmt.Sprintf("%s-%s.prod.%s", org.Slug, p.Slug, s.Cfg.BaseDomain)
 
 		rt := traefikRouter{
 			Rule:        fmt.Sprintf("Host(\"%s\")", host),
@@ -70,7 +74,11 @@ func (s *Server) writeTraefikProdRoute(ctx context.Context, _ string) error {
 			Service:     serviceName,
 		}
 		if s.Cfg.TraefikTLS {
-			rt.TLS = map[string]any{}
+			if s.Cfg.TraefikCertResolver != "" {
+				rt.TLS = map[string]any{"certResolver": s.Cfg.TraefikCertResolver}
+			} else {
+				rt.TLS = map[string]any{}
+			}
 		}
 		dyn.Routers[routerName] = rt
 		dyn.Services[serviceName] = traefikService{

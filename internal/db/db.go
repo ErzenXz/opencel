@@ -24,4 +24,3 @@ func Ping(ctx context.Context, db *sql.DB) error {
 	defer cancel()
 	return db.PingContext(ctx)
 }
-

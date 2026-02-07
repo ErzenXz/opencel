@@ -17,7 +17,11 @@
     "jsx": "preserve",
     "incremental": true,
     "baseUrl": ".",
-    "paths": {},
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
     "esModuleInterop": true,
     "plugins": [
       {

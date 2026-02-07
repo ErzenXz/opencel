@@ -11,15 +11,16 @@ import (
 
 type Config struct {
 	// Core
-	HTTPAddr   string
-	DSN        string
-	RedisAddr  string
-	BaseDomain string
+	HTTPAddr     string
+	DSN          string
+	RedisAddr    string
+	BaseDomain   string
+	PublicScheme string
 
 	// Secrets
-	JWTSecret    string
-	EnvKeyB64    string // 32 bytes base64
-	EncryptKey   []byte
+	JWTSecret  string
+	EnvKeyB64  string // 32 bytes base64
+	EncryptKey []byte
 
 	// GitHub App
 	GitHubAppID          string
@@ -32,9 +33,10 @@ type Config struct {
 	BootstrapPassword string
 
 	// Traefik file provider dynamic config path (mounted volume)
-	TraefikDynamicPath string
-	TraefikEntrypoint  string
-	TraefikTLS         bool
+	TraefikDynamicPath  string
+	TraefikEntrypoint   string
+	TraefikTLS          bool
+	TraefikCertResolver string
 
 	// Docker
 	DockerNetwork string
@@ -43,23 +45,25 @@ type Config struct {
 
 func FromEnv() (*Config, error) {
 	c := &Config{
-		HTTPAddr:           envOr("OPENCEL_HTTP_ADDR", ":8080"),
-		DSN:                os.Getenv("OPENCEL_DSN"),
-		RedisAddr:          envOr("OPENCEL_REDIS_ADDR", "localhost:6379"),
-		BaseDomain:         envOr("OPENCEL_BASE_DOMAIN", "opencel.localhost"),
-		JWTSecret:          os.Getenv("OPENCEL_JWT_SECRET"),
-		EnvKeyB64:          os.Getenv("OPENCEL_ENV_KEY_B64"),
-		GitHubAppID:        os.Getenv("OPENCEL_GITHUB_APP_ID"),
-		GitHubWebhookSecret: os.Getenv("OPENCEL_GITHUB_WEBHOOK_SECRET"),
-		GitHubPrivateKeyPEM: os.Getenv("OPENCEL_GITHUB_PRIVATE_KEY_PEM"),
+		HTTPAddr:             envOr("OPENCEL_HTTP_ADDR", ":8080"),
+		DSN:                  os.Getenv("OPENCEL_DSN"),
+		RedisAddr:            envOr("OPENCEL_REDIS_ADDR", "localhost:6379"),
+		BaseDomain:           envOr("OPENCEL_BASE_DOMAIN", "opencel.localhost"),
+		PublicScheme:         os.Getenv("OPENCEL_PUBLIC_SCHEME"),
+		JWTSecret:            os.Getenv("OPENCEL_JWT_SECRET"),
+		EnvKeyB64:            os.Getenv("OPENCEL_ENV_KEY_B64"),
+		GitHubAppID:          os.Getenv("OPENCEL_GITHUB_APP_ID"),
+		GitHubWebhookSecret:  os.Getenv("OPENCEL_GITHUB_WEBHOOK_SECRET"),
+		GitHubPrivateKeyPEM:  os.Getenv("OPENCEL_GITHUB_PRIVATE_KEY_PEM"),
 		GitHubPrivateKeyPath: os.Getenv("OPENCEL_GITHUB_PRIVATE_KEY_PATH"),
-		BootstrapEmail:     os.Getenv("OPENCEL_BOOTSTRAP_EMAIL"),
-		BootstrapPassword:  os.Getenv("OPENCEL_BOOTSTRAP_PASSWORD"),
-		TraefikDynamicPath: envOr("OPENCEL_TRAEFIK_DYNAMIC_PATH", "/traefik/dynamic/opencel.yml"),
-		TraefikEntrypoint:  envOr("OPENCEL_TRAEFIK_ENTRYPOINT", "websecure"),
-		TraefikTLS:         envBool("OPENCEL_TRAEFIK_TLS", true),
-		DockerNetwork:      envOr("OPENCEL_DOCKER_NETWORK", "opencel"),
-		RegistryAddr:       envOr("OPENCEL_REGISTRY_ADDR", "localhost:5000"),
+		BootstrapEmail:       os.Getenv("OPENCEL_BOOTSTRAP_EMAIL"),
+		BootstrapPassword:    os.Getenv("OPENCEL_BOOTSTRAP_PASSWORD"),
+		TraefikDynamicPath:   envOr("OPENCEL_TRAEFIK_DYNAMIC_PATH", "/traefik/dynamic/opencel.yml"),
+		TraefikEntrypoint:    envOr("OPENCEL_TRAEFIK_ENTRYPOINT", "websecure"),
+		TraefikTLS:           envBool("OPENCEL_TRAEFIK_TLS", true),
+		TraefikCertResolver:  os.Getenv("OPENCEL_TRAEFIK_CERT_RESOLVER"),
+		DockerNetwork:        envOr("OPENCEL_DOCKER_NETWORK", "opencel"),
+		RegistryAddr:         envOr("OPENCEL_REGISTRY_ADDR", "localhost:5000"),
 	}
 
 	var missing []string
@@ -78,6 +82,18 @@ func FromEnv() (*Config, error) {
 		return nil, fmt.Errorf("OPENCEL_ENV_KEY_B64 must be base64 for 32 bytes: %w", err)
 	}
 	c.EncryptKey = key
+
+	// Default scheme used for generating URLs shown to users.
+	// Note: In Cloudflared mode TraefikTLS is typically false, but external scheme is usually https.
+	// The installer should set OPENCEL_PUBLIC_SCHEME=https in that case.
+	if c.PublicScheme == "" {
+		if c.TraefikTLS {
+			c.PublicScheme = "https"
+		} else {
+			c.PublicScheme = "http"
+		}
+	}
+	c.PublicScheme = strings.ToLower(strings.TrimSpace(c.PublicScheme))
 
 	// GitHub config is required only if using GitHub features.
 	// We don't hard-fail here so local dev can run without it.

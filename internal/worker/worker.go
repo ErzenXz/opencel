@@ -104,7 +104,7 @@ func (w *Worker) BuildAndDeploy(ctx context.Context, deploymentID string) error 
 	_ = w.runDocker(ctx, d.ID, "build", []string{"push", imageRef}...)
 
 	previewHost := fmt.Sprintf("%s.preview.%s", strings.ReplaceAll(d.ID, "-", ""), w.Cfg.BaseDomain)
-	previewURL := fmt.Sprintf("https://%s", previewHost)
+	previewURL := fmt.Sprintf("%s://%s", w.Cfg.PublicScheme, previewHost)
 
 	labels := []string{
 		"traefik.enable=true",
@@ -114,6 +114,9 @@ func (w *Worker) BuildAndDeploy(ctx context.Context, deploymentID string) error 
 	}
 	if w.Cfg.TraefikTLS {
 		labels = append(labels, fmt.Sprintf("traefik.http.routers.%s.tls=true", containerName))
+		if w.Cfg.TraefikCertResolver != "" {
+			labels = append(labels, fmt.Sprintf("traefik.http.routers.%s.tls.certresolver=%s", containerName, w.Cfg.TraefikCertResolver))
+		}
 	}
 
 	args := []string{"run", "-d", "--name", containerName, "--network", w.Cfg.DockerNetwork}
@@ -251,7 +254,7 @@ func detectSpec(appDir string) (*spec, error) {
 				return &spec{
 					Type:        "static",
 					ServicePort: 80,
-					Dockerfile: staticDockerfile(outDir),
+					Dockerfile:  staticDockerfile(outDir),
 				}, nil
 			}
 		}

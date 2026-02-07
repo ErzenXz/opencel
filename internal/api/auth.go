@@ -75,7 +75,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		// Secure should be true for HTTPS, including behind a reverse proxy.
-		Secure: isHTTPS(r),
+		Secure:  isHTTPS(r),
 		Expires: time.Now().Add(7 * 24 * time.Hour),
 	})
 	writeJSON(w, 200, map[string]any{"ok": true})

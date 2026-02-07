@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net/mail"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,39 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+func readEnvFile(path string) map[string]string {
+	out := map[string]string{}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	lines := strings.Split(string(b), "\n")
+	for _, ln := range lines {
+		ln = strings.TrimSpace(ln)
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		i := strings.Index(ln, "=")
+		if i <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(ln[:i])
+		v := strings.TrimSpace(ln[i+1:])
+		if k == "" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func envOr(m map[string]string, k, def string) string {
+	if v := strings.TrimSpace(m[k]); v != "" {
+		return v
+	}
+	return def
+}
 
 func newInstallCmd() *cobra.Command {
 	var installDir string
@@ -40,45 +74,60 @@ func newInstallCmd() *cobra.Command {
 				installDir = "/opt/opencel"
 			}
 
-			fmt.Fprintln(out, "OpenCel installer (v1)")
+			fmt.Fprintln(out, "OpenCel installer (v2 milestone 2)")
 			fmt.Fprintln(out, "")
 
 			if !nonInteractive {
 				installDir = prompt(in, out, "Install directory", installDir)
 			}
 			if baseDomain == "" {
+				def := defaultBaseDomain()
 				if nonInteractive {
-					return fmt.Errorf("--base-domain is required with --non-interactive")
+					baseDomain = def
+				} else {
+					baseDomain = prompt(in, out, "Base domain (e.g. opencel.example.com)", def)
 				}
-				baseDomain = prompt(in, out, "Base domain (e.g. opencel.example.com)", "opencel.example.com")
 			}
 			if tlsMode == "" {
 				if nonInteractive {
+					tlsMode = "auto"
+				} else {
+					tlsMode = prompt(in, out, "TLS mode (auto|letsencrypt|cloudflare)", "auto")
+				}
+			}
+			tlsMode = strings.ToLower(strings.TrimSpace(tlsMode))
+			if tlsMode == "auto" {
+				if detectCloudflared() {
 					tlsMode = "cloudflare"
 				} else {
-					tlsMode = prompt(in, out, "TLS mode (letsencrypt|cloudflare)", "cloudflare")
+					tlsMode = "letsencrypt"
 				}
 			}
 			if tlsMode == "letsencrypt" {
 				if acmeEmail == "" {
 					if nonInteractive {
-						return fmt.Errorf("--acme-email is required when --tls letsencrypt")
+						acmeEmail = fmt.Sprintf("admin@%s", baseDomain)
+					} else {
+						acmeEmail = prompt(in, out, "ACME email (Let's Encrypt)", fmt.Sprintf("admin@%s", baseDomain))
 					}
-					acmeEmail = prompt(in, out, "ACME email (Let's Encrypt)", "admin@example.com")
+				}
+				if err := validateACMEEmail(acmeEmail); err != nil {
+					return err
 				}
 			}
 
-			if adminEmail == "" {
-				if nonInteractive {
-					return fmt.Errorf("--admin-email is required with --non-interactive")
-				}
-				adminEmail = prompt(in, out, "Admin email", "admin@example.com")
+			// Safety: if UFW is active, ensure we don't lock ourselves out and that HTTP/HTTPS works for LE.
+			if err := ensureUFW(tlsMode); err != nil {
+				return err
 			}
-			if adminPassword == "" {
-				if nonInteractive {
-					return fmt.Errorf("--admin-password is required with --non-interactive")
+
+			// Optional admin seed (otherwise onboarding creates the first user).
+			if !nonInteractive && adminEmail == "" && adminPassword == "" {
+				seed := prompt(in, out, "Seed initial admin user now? (y/N)", "n")
+				if strings.ToLower(strings.TrimSpace(seed)) == "y" {
+					adminEmail = prompt(in, out, "Admin email", "")
+					adminPassword = promptSecret(in, out, "Admin password", "")
 				}
-				adminPassword = promptSecret(in, out, "Admin password (input will be visible in this scaffold)", "")
 			}
 
 			fmt.Fprintln(out, "")
@@ -114,6 +163,9 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
+			existingEnvPath := filepath.Join(installDir, ".env")
+			existing := readEnvFile(existingEnvPath)
+
 			// Copy github key if provided.
 			if ghKeyPath != "" {
 				b, err := os.ReadFile(ghKeyPath)
@@ -128,13 +180,28 @@ func newInstallCmd() *cobra.Command {
 				_ = os.WriteFile(filepath.Join(installDir, "secrets", "github_app_private_key.pem"), []byte(""), 0o600)
 			}
 
-			pgPass := randB64(24)
-			jwtSecret := randB64(48)
-			envKey := randB64(32)
+			// Preserve secrets across upgrades; only generate if missing.
+			pgPass := envOr(existing, "OPENCEL_PG_PASSWORD", randB64(24))
+			jwtSecret := envOr(existing, "OPENCEL_JWT_SECRET", randB64(48))
+			envKey := envOr(existing, "OPENCEL_ENV_KEY_B64", randB64(32))
+
+			// Prefer existing base domain if not explicitly set by user.
+			if baseDomain == defaultBaseDomain() {
+				if v := strings.TrimSpace(existing["OPENCEL_BASE_DOMAIN"]); v != "" {
+					baseDomain = v
+				}
+			}
 
 			env := new(bytes.Buffer)
 			fmt.Fprintf(env, "OPENCEL_BASE_DOMAIN=%s\n", baseDomain)
 			fmt.Fprintf(env, "OPENCEL_ACME_EMAIL=%s\n", acmeEmail)
+			// Public scheme is usually https even for Cloudflare Tunnel (origin is http).
+			fmt.Fprintf(env, "OPENCEL_PUBLIC_SCHEME=%s\n", envOr(existing, "OPENCEL_PUBLIC_SCHEME", "https"))
+			if tlsMode == "letsencrypt" {
+				fmt.Fprintf(env, "OPENCEL_TRAEFIK_CERT_RESOLVER=%s\n", "le")
+			} else {
+				fmt.Fprintf(env, "OPENCEL_TRAEFIK_CERT_RESOLVER=%s\n", "")
+			}
 			if imageRepo == "" {
 				imageRepo = "ghcr.io/opencel"
 			}
@@ -142,11 +209,27 @@ func newInstallCmd() *cobra.Command {
 			fmt.Fprintf(env, "OPENCEL_PG_USER=opencel\n")
 			fmt.Fprintf(env, "OPENCEL_PG_PASSWORD=%s\n", pgPass)
 			fmt.Fprintf(env, "OPENCEL_PG_DB=opencel\n")
-			fmt.Fprintf(env, "OPENCEL_DSN=postgres://opencel:%s@postgres:5432/opencel?sslmode=disable\n", pgPass)
+			fmt.Fprintf(env, "OPENCEL_DSN=%s\n", envOr(existing, "OPENCEL_DSN", fmt.Sprintf("postgres://opencel:%s@postgres:5432/opencel?sslmode=disable", pgPass)))
 			fmt.Fprintf(env, "OPENCEL_JWT_SECRET=%s\n", jwtSecret)
 			fmt.Fprintf(env, "OPENCEL_ENV_KEY_B64=%s\n", envKey)
-			fmt.Fprintf(env, "OPENCEL_BOOTSTRAP_EMAIL=%s\n", adminEmail)
-			fmt.Fprintf(env, "OPENCEL_BOOTSTRAP_PASSWORD=%s\n", adminPassword)
+			// Preserve bootstrap fields unless explicitly set (useful for automation).
+			if adminEmail == "" {
+				adminEmail = strings.TrimSpace(existing["OPENCEL_BOOTSTRAP_EMAIL"])
+			}
+			if adminPassword == "" {
+				adminPassword = strings.TrimSpace(existing["OPENCEL_BOOTSTRAP_PASSWORD"])
+			}
+			if adminEmail != "" && adminPassword != "" {
+				fmt.Fprintf(env, "OPENCEL_BOOTSTRAP_EMAIL=%s\n", adminEmail)
+				fmt.Fprintf(env, "OPENCEL_BOOTSTRAP_PASSWORD=%s\n", adminPassword)
+			}
+			// Preserve existing GitHub config unless explicitly overridden.
+			if ghAppID == "" {
+				ghAppID = strings.TrimSpace(existing["OPENCEL_GITHUB_APP_ID"])
+			}
+			if ghWebhookSecret == "" {
+				ghWebhookSecret = strings.TrimSpace(existing["OPENCEL_GITHUB_WEBHOOK_SECRET"])
+			}
 			fmt.Fprintf(env, "OPENCEL_GITHUB_APP_ID=%s\n", ghAppID)
 			fmt.Fprintf(env, "OPENCEL_GITHUB_WEBHOOK_SECRET=%s\n", ghWebhookSecret)
 			if tlsMode == "cloudflare" {
@@ -197,20 +280,35 @@ func newInstallCmd() *cobra.Command {
 
 			fmt.Fprintln(out, "")
 			fmt.Fprintln(out, "Starting services with Docker Compose...")
-			if err := run(cmd, installDir, "docker", "compose", "up", "-d"); err != nil {
-				return err
+			if localBuild {
+				if err := run(cmd, installDir, "docker", "compose", "up", "-d", "--build"); err != nil {
+					return err
+				}
+			} else {
+				_ = run(cmd, installDir, "docker", "compose", "pull")
+				if err := run(cmd, installDir, "docker", "compose", "up", "-d"); err != nil {
+					return err
+				}
 			}
 
 			fmt.Fprintln(out, "")
-			fmt.Fprintf(out, "OpenCel is starting.\nDashboard: https://%s\n", baseDomain)
-			fmt.Fprintln(out, "Next: open the dashboard and login with the admin email/password you set.")
+			fmt.Fprintf(out, "OpenCel is starting.\nDashboard: %s://%s\n", "https", baseDomain)
+			fmt.Fprintln(out, "Next: open the dashboard and complete onboarding at /setup.")
+			fmt.Fprintln(out, "GitHub: configure a GitHub App to enable deploy-on-push (see Settings in the dashboard).")
+			if tlsMode == "cloudflare" {
+				fmt.Fprintln(out, "")
+				fmt.Fprintln(out, "Cloudflare Tunnel mode detected:")
+				fmt.Fprintln(out, "- Traefik is bound to 127.0.0.1:80 (origin HTTP)")
+				fmt.Fprintln(out, "- Configure your Cloudflare Tunnel to route the base domain and wildcard preview/prod to http://localhost:80")
+				fmt.Fprintln(out, "- Example: deploy/cloudflared/config.yml.example")
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&installDir, "dir", "", "Install directory (default /opt/opencel)")
 	cmd.Flags().BoolVar(&localBuild, "local-build", false, "Use repo-local compose file with build contexts")
 	cmd.Flags().StringVar(&repoDir, "repo", "", "Repo directory (used with --local-build)")
-	cmd.Flags().StringVar(&tlsMode, "tls", "", "TLS mode: letsencrypt or cloudflare")
+	cmd.Flags().StringVar(&tlsMode, "tls", "", "TLS mode: auto, letsencrypt or cloudflare")
 	cmd.Flags().StringVar(&baseDomain, "base-domain", "", "Base domain (e.g. opencel.example.com)")
 	cmd.Flags().StringVar(&acmeEmail, "acme-email", "", "ACME email (Let's Encrypt)")
 	cmd.Flags().StringVar(&adminEmail, "admin-email", "", "Admin email (bootstrapped on first start)")
@@ -221,6 +319,104 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting; requires flags")
 	cmd.Flags().StringVar(&imageRepo, "image-repo", "", "Container registry/repo prefix (default ghcr.io/opencel)")
 	return cmd
+}
+
+func ensureUFW(tlsMode string) error {
+	if !commandExists("ufw") {
+		return nil
+	}
+	out, err := exec.Command("sh", "-lc", "ufw status 2>/dev/null | head -n 1").Output()
+	if err != nil {
+		return nil
+	}
+	if !strings.Contains(string(out), "Status: active") {
+		return nil
+	}
+	// Always keep SSH allowed if UFW is in use.
+	_ = exec.Command("sh", "-lc", "ufw allow OpenSSH >/dev/null 2>&1 || true").Run()
+	if tlsMode == "letsencrypt" {
+		_ = exec.Command("sh", "-lc", "ufw allow 80/tcp >/dev/null 2>&1 || true").Run()
+		_ = exec.Command("sh", "-lc", "ufw allow 443/tcp >/dev/null 2>&1 || true").Run()
+	}
+	_ = exec.Command("sh", "-lc", "ufw reload >/dev/null 2>&1 || true").Run()
+	return nil
+}
+
+func defaultBaseDomain() string {
+	ip := detectPublicIP()
+	if ip != "" {
+		return fmt.Sprintf("opencel.%s.sslip.io", ip)
+	}
+	return "opencel.example.com"
+}
+
+func detectPublicIP() string {
+	// Best-effort, no hard dependency.
+	if commandExists("curl") {
+		if out, err := exec.Command("sh", "-lc", "curl -4 -fsS https://ifconfig.me 2>/dev/null | tr -d '\\n'").Output(); err == nil {
+			v := strings.TrimSpace(string(out))
+			if v != "" {
+				return v
+			}
+		}
+	}
+	if out, err := exec.Command("sh", "-lc", "hostname -I 2>/dev/null | awk '{print $1}' | tr -d '\\n'").Output(); err == nil {
+		v := strings.TrimSpace(string(out))
+		return v
+	}
+	return ""
+}
+
+func detectCloudflared() bool {
+	if !commandExists("cloudflared") {
+		return false
+	}
+	// Common locations.
+	candidates := []string{
+		"/etc/cloudflared",
+		filepath.Join(os.Getenv("HOME"), ".cloudflared"),
+	}
+	for _, d := range candidates {
+		ents, err := os.ReadDir(d)
+		if err != nil {
+			continue
+		}
+		for _, e := range ents {
+			if e.IsDir() {
+				continue
+			}
+			if strings.HasSuffix(e.Name(), ".json") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func commandExists(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+func validateACMEEmail(email string) error {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return fmt.Errorf("invalid --acme-email: empty")
+	}
+	addr, err := mail.ParseAddress(email)
+	if err != nil || addr == nil || addr.Address == "" {
+		return fmt.Errorf("invalid --acme-email: %v", err)
+	}
+	parts := strings.Split(addr.Address, "@")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid --acme-email")
+	}
+	domain := strings.ToLower(strings.TrimSpace(parts[1]))
+	switch domain {
+	case "example.com", "example.org", "example.net":
+		return fmt.Errorf("invalid --acme-email: forbidden domain %q", domain)
+	}
+	return nil
 }
 
 func prompt(in *bufio.Reader, out io.Writer, label, def string) string {
@@ -271,6 +467,8 @@ const releaseComposeYML = `name: opencel
 services:
   traefik:
     image: traefik:v3
+    restart: unless-stopped
+    restart: unless-stopped
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -296,6 +494,8 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${OPENCEL_PG_USER:-opencel}
       POSTGRES_PASSWORD: ${OPENCEL_PG_PASSWORD:-opencel}
@@ -311,6 +511,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -320,6 +522,8 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OPENCEL_MINIO_USER:-opencel}
@@ -330,21 +534,26 @@ services:
 
   registry:
     image: registry:2
+    restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
+    restart: unless-stopped
     volumes:
       - ./.data/registry:/var/lib/registry
     networks: [opencel]
 
   api:
     image: ${OPENCEL_IMAGE_REPO}/opencel-api:latest
+    restart: unless-stopped
     environment:
       OPENCEL_HTTP_ADDR: ":8080"
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_JWT_SECRET: ${OPENCEL_JWT_SECRET}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -371,11 +580,14 @@ services:
 
   worker:
     image: ${OPENCEL_IMAGE_REPO}/opencel-worker:latest
+    restart: unless-stopped
     environment:
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -395,6 +607,7 @@ services:
 
   web:
     image: ${OPENCEL_IMAGE_REPO}/opencel-web:latest
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_started
@@ -476,13 +689,16 @@ services:
 
   api:
     image: ${OPENCEL_IMAGE_REPO}/opencel-api:latest
+    restart: unless-stopped
     environment:
       OPENCEL_HTTP_ADDR: ":8080"
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_JWT_SECRET: ${OPENCEL_JWT_SECRET}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -510,11 +726,14 @@ services:
 
   worker:
     image: ${OPENCEL_IMAGE_REPO}/opencel-worker:latest
+    restart: unless-stopped
     environment:
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -536,6 +755,7 @@ services:
 
   web:
     image: ${OPENCEL_IMAGE_REPO}/opencel-web:latest
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_started
@@ -556,6 +776,7 @@ const localBuildComposeLetsEncrypt = `name: opencel
 services:
   traefik:
     image: traefik:v3
+    restart: unless-stopped
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -581,6 +802,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${OPENCEL_PG_USER:-opencel}
       POSTGRES_PASSWORD: ${OPENCEL_PG_PASSWORD:-opencel}
@@ -596,6 +818,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -605,6 +828,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OPENCEL_MINIO_USER:-opencel}
@@ -616,7 +840,8 @@ services:
   registry:
     image: registry:2
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
+    restart: unless-stopped
     volumes:
       - ./.data/registry:/var/lib/registry
     networks: [opencel]
@@ -625,13 +850,16 @@ services:
     build:
       context: ${OPENCEL_REPO_DIR}
       dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.api
+    restart: unless-stopped
     environment:
       OPENCEL_HTTP_ADDR: ":8080"
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_JWT_SECRET: ${OPENCEL_JWT_SECRET}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -662,11 +890,14 @@ services:
     build:
       context: ${OPENCEL_REPO_DIR}
       dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.worker
+    restart: unless-stopped
     environment:
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -690,6 +921,7 @@ services:
     build:
       context: ${OPENCEL_REPO_DIR}
       dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.web
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_started
@@ -711,6 +943,7 @@ const localBuildComposeCloudflare = `name: opencel
 services:
   traefik:
     image: traefik:v3
+    restart: unless-stopped
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -729,6 +962,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${OPENCEL_PG_USER:-opencel}
       POSTGRES_PASSWORD: ${OPENCEL_PG_PASSWORD:-opencel}
@@ -744,6 +978,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -753,6 +988,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OPENCEL_MINIO_USER:-opencel}
@@ -763,6 +999,7 @@ services:
 
   registry:
     image: registry:2
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
@@ -773,13 +1010,16 @@ services:
     build:
       context: ${OPENCEL_REPO_DIR}
       dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.api
+    restart: unless-stopped
     environment:
       OPENCEL_HTTP_ADDR: ":8080"
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_JWT_SECRET: ${OPENCEL_JWT_SECRET}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
       OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
       OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
@@ -809,13 +1049,16 @@ services:
     build:
       context: ${OPENCEL_REPO_DIR}
       dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.worker
+    restart: unless-stopped
     environment:
       OPENCEL_DSN: ${OPENCEL_DSN}
       OPENCEL_REDIS_ADDR: "redis:6379"
       OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_PUBLIC_SCHEME: ${OPENCEL_PUBLIC_SCHEME:-https}
       OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
-      OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID}
-      OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET}
+      OPENCEL_TRAEFIK_CERT_RESOLVER: ${OPENCEL_TRAEFIK_CERT_RESOLVER:-}
+      OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID:-}
+      OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET:-}
       OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
       OPENCEL_DOCKER_NETWORK: "opencel"
       OPENCEL_REGISTRY_ADDR: "localhost:5000"
@@ -837,6 +1080,7 @@ services:
     build:
       context: ${OPENCEL_REPO_DIR}
       dockerfile: ${OPENCEL_REPO_DIR}/deploy/compose/Dockerfile.web
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_started

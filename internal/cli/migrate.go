@@ -35,4 +35,3 @@ func newMigrateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dir, "dir", "./migrations", "Migrations directory")
 	return cmd
 }
-

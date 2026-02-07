@@ -22,4 +22,3 @@ func RunMigrations(dsn string) error {
 	}
 	return nil
 }
-

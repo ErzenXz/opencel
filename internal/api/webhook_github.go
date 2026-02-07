@@ -65,10 +65,19 @@ func (s *Server) handleGitHubPush(w http.ResponseWriter, r *http.Request, body [
 	}
 	if project == nil {
 		// auto-create to allow "push to deploy" with only webhook wiring.
+		org, err := s.Store.FirstOrganization(r.Context())
+		if err != nil {
+			writeJSON(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+		if org == nil {
+			writeJSON(w, 400, map[string]any{"error": "no org exists (complete setup first)"})
+			return
+		}
 		slug := strings.ToLower(strings.ReplaceAll(strings.Split(repoFull, "/")[1], "_", "-"))
 		def := p.Repository.DefaultBranch
 		inst := p.Installation.ID
-		project, err = s.Store.CreateProject(r.Context(), slug, repoFull, &inst, &def)
+		project, err = s.Store.CreateProject(r.Context(), org.ID, slug, repoFull, &inst, &def)
 		if err != nil {
 			writeJSON(w, 500, map[string]any{"error": err.Error()})
 			return
@@ -97,4 +106,3 @@ func (s *Server) handleGitHubPush(w http.ResponseWriter, r *http.Request, body [
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "deployment_id": dep.ID})
 }
-
