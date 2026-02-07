@@ -270,7 +270,7 @@ const releaseComposeYML = `name: opencel
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -415,7 +415,7 @@ const releaseComposeCloudflare = `name: opencel
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -555,7 +555,7 @@ const localBuildComposeLetsEncrypt = `name: opencel
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -710,7 +710,7 @@ const localBuildComposeCloudflare = `name: opencel
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
