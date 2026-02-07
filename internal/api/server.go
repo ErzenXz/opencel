@@ -66,6 +66,10 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 	})
 
 	r.Route("/api", func(r chi.Router) {
+		r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte("ok"))
+		})
 		r.Post("/auth/login", s.handleLogin)
 		r.Post("/auth/logout", s.handleLogout)
 
