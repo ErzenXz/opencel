@@ -426,7 +426,7 @@ services:
       - "--accesslog=true"
       - "--log.level=INFO"
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/dynamic:/traefik/dynamic
@@ -469,7 +469,7 @@ services:
   registry:
     image: registry:2
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./.data/registry:/var/lib/registry
     networks: [opencel]
@@ -721,7 +721,7 @@ services:
       - "--accesslog=true"
       - "--log.level=INFO"
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/dynamic:/traefik/dynamic
@@ -764,7 +764,7 @@ services:
   registry:
     image: registry:2
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./.data/registry:/var/lib/registry
     networks: [opencel]
