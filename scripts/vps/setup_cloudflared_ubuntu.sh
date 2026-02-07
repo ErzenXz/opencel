@@ -57,7 +57,7 @@ fi
 
 TMP_BIN="$(mktemp -d)/opencel"
 sudo docker run --rm -v "$SRC_DIR:/src" -w /src golang:1.24-alpine \
-  sh -lc "apk add --no-cache git ca-certificates >/dev/null && go build -trimpath -ldflags='-s -w' -o /out/opencel ./cmd/opencel && cp /out/opencel /src/.opencel-cli"
+  sh -c "apk add --no-cache git ca-certificates >/dev/null && /usr/local/go/bin/go build -trimpath -ldflags='-s -w' -o '$TMP_BIN' ./cmd/opencel && cp '$TMP_BIN' /src/.opencel-cli"
 
 sudo install -m 0755 "$SRC_DIR/.opencel-cli" /usr/local/bin/opencel
 
