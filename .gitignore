@@ -1,0 +1,22 @@
+.DS_Store
+.idea
+.vscode
+
+# Go
+bin/
+dist/
+*.test
+coverage.out
+
+# Node/Next
+node_modules/
+.next/
+out/
+apps/web/.env.local
+
+# Local install state
+.opencel/
+
+# Runtime data (compose/dev)
+deploy/compose/.data/
+

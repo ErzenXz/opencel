@@ -1,0 +1,151 @@
+name: opencel
+
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--api.dashboard=true"
+      - "--accesslog=true"
+      - "--log.level=INFO"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.storage=/traefik/acme/acme.json"
+      - "--certificatesresolvers.le.acme.email=${OPENCEL_ACME_EMAIL}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic:/traefik/dynamic
+      - ./.data/traefik/acme:/traefik/acme
+    networks:
+      - opencel
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${OPENCEL_PG_USER:-opencel}
+      POSTGRES_PASSWORD: ${OPENCEL_PG_PASSWORD:-opencel}
+      POSTGRES_DB: ${OPENCEL_PG_DB:-opencel}
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OPENCEL_PG_USER:-opencel} -d ${OPENCEL_PG_DB:-opencel}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [opencel]
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [opencel]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${OPENCEL_MINIO_USER:-opencel}
+      MINIO_ROOT_PASSWORD: ${OPENCEL_MINIO_PASSWORD:-opencel-opencel}
+    volumes:
+      - ./.data/minio:/data
+    networks: [opencel]
+
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./.data/registry:/var/lib/registry
+    networks: [opencel]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.api
+    environment:
+      OPENCEL_HTTP_ADDR: ":8080"
+      OPENCEL_DSN: ${OPENCEL_DSN}
+      OPENCEL_REDIS_ADDR: "redis:6379"
+      OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_JWT_SECRET: ${OPENCEL_JWT_SECRET}
+      OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID}
+      OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET}
+      OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
+      OPENCEL_BOOTSTRAP_EMAIL: ${OPENCEL_BOOTSTRAP_EMAIL}
+      OPENCEL_BOOTSTRAP_PASSWORD: ${OPENCEL_BOOTSTRAP_PASSWORD}
+      OPENCEL_TRAEFIK_DYNAMIC_PATH: "/traefik/dynamic/opencel.yml"
+      OPENCEL_DOCKER_NETWORK: "opencel"
+      OPENCEL_ACME_EMAIL: ${OPENCEL_ACME_EMAIL}
+      OPENCEL_REGISTRY_ADDR: "localhost:5000"
+    volumes:
+      - ./traefik/dynamic:/traefik/dynamic
+      - ./secrets:/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.opencel-api.rule=Host(\"${OPENCEL_BASE_DOMAIN}\") && PathPrefix(\"/api\")"
+      - "traefik.http.routers.opencel-api.entrypoints=websecure"
+      - "traefik.http.routers.opencel-api.tls.certresolver=le"
+      - "traefik.http.services.opencel-api.loadbalancer.server.port=8080"
+    networks: [opencel]
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.worker
+    environment:
+      OPENCEL_DSN: ${OPENCEL_DSN}
+      OPENCEL_REDIS_ADDR: "redis:6379"
+      OPENCEL_BASE_DOMAIN: ${OPENCEL_BASE_DOMAIN}
+      OPENCEL_ENV_KEY_B64: ${OPENCEL_ENV_KEY_B64}
+      OPENCEL_GITHUB_APP_ID: ${OPENCEL_GITHUB_APP_ID}
+      OPENCEL_GITHUB_WEBHOOK_SECRET: ${OPENCEL_GITHUB_WEBHOOK_SECRET}
+      OPENCEL_GITHUB_PRIVATE_KEY_PATH: "/secrets/github_app_private_key.pem"
+      OPENCEL_DOCKER_NETWORK: "opencel"
+      OPENCEL_REGISTRY_ADDR: "localhost:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./secrets:/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      registry:
+        condition: service_started
+    networks: [opencel]
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.web
+    depends_on:
+      api:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.opencel-web.rule=Host(\"${OPENCEL_BASE_DOMAIN}\")"
+      - "traefik.http.routers.opencel-web.entrypoints=websecure"
+      - "traefik.http.routers.opencel-web.tls.certresolver=le"
+      - "traefik.http.services.opencel-web.loadbalancer.server.port=3000"
+    networks: [opencel]
+
+networks:
+  opencel:
+    name: opencel

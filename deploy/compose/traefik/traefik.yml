@@ -1,0 +1,29 @@
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+  file:
+    directory: "/traefik/dynamic"
+    watch: true
+
+api:
+  dashboard: true
+
+log:
+  level: INFO
+
+accessLog: {}
+
+certificatesResolvers:
+  le:
+    acme:
+      email: "admin@example.com"
+      storage: "/traefik/acme/acme.json"
+      httpChallenge:
+        entryPoint: web
+
