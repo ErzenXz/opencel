@@ -105,6 +105,10 @@ func isHTTPS(r *http.Request) bool {
 	if strings.EqualFold(r.Header.Get("X-Forwarded-Ssl"), "on") {
 		return true
 	}
+	// Cloudflare Tunnel often sets Cf-Visitor: {"scheme":"https"}
+	if v := r.Header.Get("Cf-Visitor"); v != "" && strings.Contains(strings.ToLower(v), "\"scheme\":\"https\"") {
+		return true
+	}
 	return false
 }
 
