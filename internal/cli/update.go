@@ -66,14 +66,14 @@ func newUpdateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&skipPull, "skip-pull", false, "Skip docker compose pull")
 	cmd.Flags().BoolVar(&withSelf, "self", false, "Also update the opencel CLI binary first")
 	cmd.Flags().StringVar(&version, "version", "latest", "CLI version when using --self (default latest)")
-	cmd.Flags().StringVar(&installRepo, "install-repo", "opencel/opencel", "GitHub repo for installer assets when using --self")
+	cmd.Flags().StringVar(&installRepo, "install-repo", "ErzenXz/opencel", "GitHub repo for installer assets when using --self")
 	return cmd
 }
 
 func runSelfUpdate(out io.Writer, version string, repo string) error {
 	repo = strings.TrimSpace(repo)
 	if repo == "" {
-		repo = "opencel/opencel"
+		repo = "ErzenXz/opencel"
 	}
 	scriptURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/install/install.sh", repo)
 	cmd := exec.Command("sh", "-c", "curl -fsSL \"$OPENCEL_INSTALL_SCRIPT_URL\" | sh")

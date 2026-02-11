@@ -82,7 +82,7 @@ npm run check
 Install directly from GitHub (no custom domain required):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/opencel/opencel/main/install/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ErzenXz/opencel/main/install/install.sh | sh
 ```
 
 In-repo installer entrypoint:
@@ -112,7 +112,7 @@ sudo opencel update --self
 If your VPS currently has an older `opencel` binary that does not include `update`, run the installer once:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/opencel/opencel/main/install/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ErzenXz/opencel/main/install/install.sh | sh
 ```
 
 Then use `opencel update` for future updates.
@@ -120,7 +120,7 @@ Then use `opencel update` for future updates.
 If you install from your own GitHub fork, set the release repo:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/opencel/opencel/main/install/install.sh | OPENCEL_INSTALL_REPO=ErzenXz/opencel sh
+curl -fsSL https://raw.githubusercontent.com/ErzenXz/opencel/main/install/install.sh | OPENCEL_INSTALL_REPO=ErzenXz/opencel sh
 ```
 
 ## Cloudflare Tunnel (recommended for VPS)
