@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, LogOut, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/api";
@@ -31,7 +31,7 @@ export function setStoredOrgID(id: string) {
   }
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const router = useRouter();
   const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
@@ -100,13 +100,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[radial-gradient(70%_80%_at_100%_0%,hsl(var(--primary)/0.06),transparent)]">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Link href="/projects" className="font-semibold tracking-tight">
               OpenCel
             </Link>
+            <span className="hidden rounded-md border border-border/70 bg-muted/50 px-2 py-1 text-[11px] font-medium text-muted-foreground sm:inline-flex">
+              self-hosted cloud
+            </span>
             <div className="h-5 w-px bg-border" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -144,6 +147,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex items-center gap-2">
+            <Button asChild size="sm" className="hidden sm:inline-flex gap-1.5">
+              <Link href="/import">
+                <Plus className="h-3.5 w-3.5" />
+                New
+              </Link>
+            </Button>
             {nav.map((n) => (
               <Link
                 key={n.href}

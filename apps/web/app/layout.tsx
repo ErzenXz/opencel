@@ -4,7 +4,7 @@ import { Sonner } from "@/components/ui/sonner";
 
 export const metadata = {
   title: "OpenCel",
-  description: "Self-hosted Vercel-like deployments"
+  description: "Open source, self-hosted Vercel-style deployments"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
