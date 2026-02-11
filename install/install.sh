@@ -47,6 +47,30 @@ ensure_compose() {
   fi
 }
 
+build_from_source_with_docker() {
+  src_tar="$tmpdir/src.tar.gz"
+  src_dir="$tmpdir/src"
+  mkdir -p "$src_dir"
+  src_url="https://codeload.github.com/${REPO}/tar.gz/refs/heads/main"
+  echo "Release asset not found. Falling back to source build from: ${src_url}"
+  curl -fsSL "$src_url" -o "$src_tar"
+  tar -xzf "$src_tar" -C "$src_dir"
+  root_dir="$(LC_ALL=C ls -1 "$src_dir" | sed -n '1p')"
+  if [ -z "$root_dir" ] || [ ! -d "$src_dir/$root_dir" ]; then
+    echo "Could not extract source archive for ${REPO}" >&2
+    exit 1
+  fi
+  docker run --rm \
+    -e CGO_ENABLED=0 \
+    -e GOOS="$os" \
+    -e GOARCH="$arch" \
+    -v "$src_dir/$root_dir:/src" \
+    -v "$tmpdir:/out" \
+    -w /src \
+    golang:1.24 \
+    sh -lc 'go build -o /out/opencel ./cmd/opencel'
+}
+
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
 
@@ -86,7 +110,9 @@ else
 fi
 
 echo "Downloading OpenCel CLI: ${url}"
-curl -fsSL "$url" -o "$tmpdir/$asset"
+if ! curl -fsSL "$url" -o "$tmpdir/$asset"; then
+  build_from_source_with_docker
+fi
 
 if curl -fsSL "$sha_url" -o "$tmpdir/$asset.sha256"; then
   if command -v sha256sum >/dev/null 2>&1; then
@@ -97,7 +123,9 @@ if curl -fsSL "$sha_url" -o "$tmpdir/$asset.sha256"; then
   fi
 fi
 
-tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+if [ -f "$tmpdir/$asset" ]; then
+  tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+fi
 
 if [ ! -f "$tmpdir/opencel" ]; then
   echo "Downloaded asset did not contain an 'opencel' binary." >&2
