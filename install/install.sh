@@ -68,7 +68,7 @@ build_from_source_with_docker() {
     -v "$tmpdir:/out" \
     -w /src \
     golang:1.24 \
-    sh -lc 'go build -o /out/opencel ./cmd/opencel'
+    /usr/local/go/bin/go build -o /out/opencel ./cmd/opencel
 }
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
