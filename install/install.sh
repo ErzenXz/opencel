@@ -5,7 +5,7 @@ set -eu
 # This script downloads the `opencel` CLI from GitHub Releases and runs `opencel install`.
 #
 # Intended usage:
-#   curl -fsSL https://get.opencel.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/opencel/opencel/main/install/install.sh | sh
 #
 # For now, in-repo usage:
 #   sh install/install.sh

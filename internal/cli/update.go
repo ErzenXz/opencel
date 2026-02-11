@@ -71,12 +71,18 @@ func newUpdateCmd() *cobra.Command {
 }
 
 func runSelfUpdate(out io.Writer, version string, repo string) error {
-	cmd := exec.Command("sh", "-c", "curl -fsSL https://get.opencel.sh | sh")
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		repo = "opencel/opencel"
+	}
+	scriptURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/install/install.sh", repo)
+	cmd := exec.Command("sh", "-c", "curl -fsSL \"$OPENCEL_INSTALL_SCRIPT_URL\" | sh")
 	cmd.Stdout = out
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(
 		os.Environ(),
 		"OPENCEL_INTERACTIVE=0",
+		fmt.Sprintf("OPENCEL_INSTALL_SCRIPT_URL=%s", scriptURL),
 		fmt.Sprintf("OPENCEL_VERSION=%s", version),
 		fmt.Sprintf("OPENCEL_INSTALL_REPO=%s", repo),
 	)
