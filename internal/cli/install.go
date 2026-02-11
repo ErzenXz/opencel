@@ -468,7 +468,6 @@ services:
   traefik:
     image: traefik:v3
     restart: unless-stopped
-    restart: unless-stopped
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -495,7 +494,6 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
-    restart: unless-stopped
     environment:
       POSTGRES_USER: ${OPENCEL_PG_USER:-opencel}
       POSTGRES_PASSWORD: ${OPENCEL_PG_PASSWORD:-opencel}
@@ -512,7 +510,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -522,7 +519,6 @@ services:
 
   minio:
     image: minio/minio:latest
-    restart: unless-stopped
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -537,7 +533,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:5000:5000"
-    restart: unless-stopped
     volumes:
       - ./.data/registry:/var/lib/registry
     networks: [opencel]
