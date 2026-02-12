@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ArrowUpRight, Logs, Rocket, Server, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiBase, apiFetch } from "@/lib/api";
@@ -88,18 +89,16 @@ export default function ProjectPage() {
     if (!logsFor) return;
     setLogs("");
     const url = `${apiBase()}/api/deployments/${logsFor}/logs`;
-    const es = new EventSource(url, { withCredentials: true } as any);
-    es.addEventListener("log", (ev: any) => {
+    const es = new EventSource(url, { withCredentials: true } as EventSourceInit);
+    es.addEventListener("log", (ev: MessageEvent) => {
       try {
-        const data = JSON.parse(ev.data);
+        const data = JSON.parse(ev.data) as { chunk?: string };
         setLogs((prev) => prev + (data.chunk || ""));
       } catch {
         // ignore
       }
     });
-    es.addEventListener("error", () => {
-      es.close();
-    });
+    es.addEventListener("error", () => es.close());
     return () => es.close();
   }, [logsFor]);
 
@@ -131,74 +130,64 @@ export default function ProjectPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/projects">Projects</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{project?.slug || "Project"}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <h1 className="text-2xl font-semibold tracking-tight">{project?.slug || "Project"}</h1>
-          <div className="text-sm text-muted-foreground">{project?.repo_full_name}</div>
-        </div>
-        <Button variant="outline" onClick={refresh}>
-          Refresh
-        </Button>
+      <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-5">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link href="/projects">Projects</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{project?.slug || "Project"}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <h1 className="mt-3 text-2xl font-semibold text-white">{project?.slug || "Project"}</h1>
+        <p className="mt-1 text-sm text-zinc-400">{project?.repo_full_name}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Deployments</div><div className="mt-2 text-2xl font-semibold">{deployments.length}</div></CardContent></Card>
+        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Production</div><div className="mt-2">{project?.production_deployment_id ? <Badge variant="secondary">Assigned</Badge> : <Badge variant="outline">Not promoted</Badge>}</div></CardContent></Card>
+        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Log stream</div><div className="mt-2 text-sm text-zinc-300">{selectedDeployment ? selectedDeployment.id.slice(0, 8) : "Idle"}</div></CardContent></Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <Card className="border-white/10 bg-black/20">
           <CardHeader>
-            <CardTitle>Deployments</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base"><Rocket className="h-4 w-4" />Deployments</CardTitle>
             <CardDescription>Push to GitHub to trigger a deployment.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent>
             {deployments.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No deployments yet.</div>
+              <div className="text-sm text-zinc-500">No deployments yet.</div>
             ) : (
-              <div className="divide-y divide-border rounded-lg border">
+              <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
                 {deployments.map((d) => {
                   const branch = d.git_ref.replace("refs/heads/", "");
-                  const isProd = d.type === "production";
                   const isPromoted = project?.production_deployment_id === d.id;
                   return (
-                    <div key={d.id} className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Badge variant={d.status === "READY" ? "secondary" : "outline"}>{d.status}</Badge>
-                            {isProd ? <Badge variant="outline">production</Badge> : <Badge variant="outline">preview</Badge>}
-                            {isPromoted ? <Badge>live</Badge> : null}
-                          </div>
-                          <div className="mt-1 text-sm text-muted-foreground truncate">
-                            {branch} · {d.git_sha.slice(0, 7)}
-                          </div>
-                          {d.preview_url ? (
-                            <div className="mt-2 text-sm">
-                              <a className="underline" href={d.preview_url} target="_blank" rel="noreferrer">
-                                {d.preview_url}
-                              </a>
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleString()}</div>
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" variant="outline" onClick={() => setLogsFor(d.id)}>
-                              Logs
-                            </Button>
-                            <Button size="sm" onClick={() => promote(d.id)}>
-                              Promote
-                            </Button>
-                          </div>
+                    <div key={d.id} className="space-y-3 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={d.status === "READY" ? "secondary" : "outline"}>{d.status}</Badge>
+                        <Badge variant="outline">{d.type}</Badge>
+                        {isPromoted ? <Badge>live</Badge> : null}
+                      </div>
+                      <div className="text-sm text-zinc-400">{branch} · {d.git_sha.slice(0, 7)}</div>
+                      {d.preview_url ? (
+                        <a className="inline-flex items-center gap-1 text-sm text-zinc-200 underline" href={d.preview_url} target="_blank" rel="noreferrer">
+                          Open preview <ArrowUpRight className="h-3.5 w-3.5" />
+                        </a>
+                      ) : null}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs text-zinc-500">{new Date(d.created_at).toLocaleString()}</div>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="outline" className="border-white/15 bg-transparent hover:bg-white/5" onClick={() => setLogsFor(d.id)}>
+                            <Logs className="mr-1.5 h-3.5 w-3.5" />Logs
+                          </Button>
+                          <Button size="sm" onClick={() => promote(d.id)}>Promote</Button>
                         </div>
                       </div>
                     </div>
@@ -209,26 +198,26 @@ export default function ProjectPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-white/10 bg-black/20">
           <CardHeader>
-            <CardTitle>Logs</CardTitle>
-            <CardDescription>{selectedDeployment ? `Streaming logs for ${selectedDeployment.id.slice(0, 8)}...` : "Select a deployment."}</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base"><TerminalSquare className="h-4 w-4" />Live logs</CardTitle>
+            <CardDescription>{selectedDeployment ? `Streaming ${selectedDeployment.id.slice(0, 8)}` : "Select a deployment to stream logs."}</CardDescription>
           </CardHeader>
           <CardContent>
-            <pre className="min-h-[420px] whitespace-pre-wrap break-words rounded-lg border bg-muted/30 p-4 text-xs leading-5">
+            <pre className="min-h-[430px] whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/50 p-4 text-xs leading-5 text-zinc-300">
               {selectedDeployment ? logs || "(waiting for logs...)" : ""}
             </pre>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-white/10 bg-black/20">
         <CardHeader>
-          <CardTitle>Environment variables</CardTitle>
-          <CardDescription>Stored encrypted. Values are write-only in the UI for now.</CardDescription>
+          <CardTitle className="flex items-center gap-2 text-base"><Server className="h-4 w-4" />Environment variables</CardTitle>
+          <CardDescription>Values are write-only. Configure preview and production independently.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Tabs value={envScope} onValueChange={(v) => setEnvScope(v as any)}>
+          <Tabs value={envScope} onValueChange={(v) => setEnvScope(v as "preview" | "production") }>
             <TabsList>
               <TabsTrigger value="preview">Preview</TabsTrigger>
               <TabsTrigger value="production">Production</TabsTrigger>
@@ -237,35 +226,25 @@ export default function ProjectPage() {
             <TabsContent value="production" />
           </Tabs>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Key</div>
-              <Input placeholder="DATABASE_URL" value={envKey} onChange={(e) => setEnvKey(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Value</div>
-              <Input placeholder="(write-only)" value={envValue} onChange={(e) => setEnvValue(e.target.value)} />
-            </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input placeholder="DATABASE_URL" value={envKey} onChange={(e) => setEnvKey(e.target.value)} className="border-white/10 bg-white/[0.02]" />
+            <Input placeholder="(write-only)" value={envValue} onChange={(e) => setEnvValue(e.target.value)} className="border-white/10 bg-white/[0.02]" />
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button onClick={setEnv} disabled={!envKey}>
-              Save
-            </Button>
-            <Button variant="outline" onClick={() => refreshEnv(envScope)}>
-              Refresh
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={setEnv} disabled={!envKey}>Save</Button>
+            <Button variant="outline" className="border-white/15 bg-transparent hover:bg-white/5" onClick={() => refreshEnv(envScope)}>Refresh</Button>
           </div>
 
-          <Separator />
+          <Separator className="bg-white/10" />
 
           {envs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No env vars set for {envScope}.</div>
+            <div className="text-sm text-zinc-500">No env vars set for {envScope}.</div>
           ) : (
-            <div className="divide-y divide-border rounded-lg border">
+            <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
               {envs.map((v) => (
-                <div key={`${v.scope}:${v.key}`} className="p-3 flex items-center justify-between">
-                  <div className="font-mono text-sm">{v.key}</div>
+                <div key={`${v.scope}:${v.key}`} className="flex items-center justify-between px-4 py-3">
+                  <div className="font-mono text-sm text-zinc-200">{v.key}</div>
                   <Badge variant="outline">{v.scope}</Badge>
                 </div>
               ))}
@@ -276,4 +255,3 @@ export default function ProjectPage() {
     </div>
   );
 }
-

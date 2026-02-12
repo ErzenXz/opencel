@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Building2, PlusCircle, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/api";
@@ -22,7 +23,6 @@ export default function OrgsPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
-
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "owner">("member");
 
@@ -34,9 +34,7 @@ export default function OrgsPage() {
     try {
       const os = (await apiFetch("/api/orgs")) as Org[];
       setOrgs(os);
-      if (!getStoredOrgID() && os[0]?.id) {
-        setStoredOrgID(os[0].id);
-      }
+      if (!getStoredOrgID() && os[0]?.id) setStoredOrgID(os[0].id);
     } catch (e: any) {
       toast.error(String(e?.message || e));
     } finally {
@@ -49,8 +47,7 @@ export default function OrgsPage() {
     try {
       const ms = (await apiFetch(`/api/orgs/${orgID}/members`)) as Member[];
       setMembers(ms);
-    } catch (e: any) {
-      // Often forbidden for non-admins.
+    } catch {
       setMembers([]);
     }
   }
@@ -105,69 +102,64 @@ export default function OrgsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Organizations</h1>
-          <p className="text-sm text-muted-foreground">Manage orgs and memberships.</p>
+          <div className="text-xs uppercase tracking-[0.16em] text-zinc-500">Team Management</div>
+          <h1 className="mt-2 text-2xl font-semibold text-white">Organizations</h1>
+          <p className="mt-1 text-sm text-zinc-400">Manage org workspaces, roles, and invites.</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button>Create org</Button>
+            <Button className="gap-2"><PlusCircle className="h-4 w-4" />Create org</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create organization</DialogTitle>
-              <DialogDescription>Creates a new organization and makes you an owner.</DialogDescription>
+              <DialogDescription>Creates a new organization and makes you owner.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Name</div>
-              <Input value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} placeholder="Acme" />
-            </div>
+            <Input value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} placeholder="Acme" />
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={createOrg} disabled={!newOrgName}>
-                Create
-              </Button>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button onClick={createOrg} disabled={!newOrgName}>Create</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Organizations</div><div className="mt-2 text-xl font-semibold">{orgs.length}</div></CardContent></Card>
+        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Active workspace</div><div className="mt-2 text-sm font-medium truncate">{activeOrg?.name || "None"}</div></CardContent></Card>
+        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Members listed</div><div className="mt-2 text-xl font-semibold">{members.length}</div></CardContent></Card>
+      </div>
+
+      <Card className="border-white/10 bg-black/20">
         <CardHeader>
-          <CardTitle>Your organizations</CardTitle>
-          <CardDescription>Role applies per-organization.</CardDescription>
+          <CardTitle className="flex items-center gap-2 text-base"><Building2 className="h-4 w-4" />Your organizations</CardTitle>
+          <CardDescription>Select a workspace to scope projects and members.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent>
           {loading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
+            <div className="text-sm text-zinc-500">Loading organizations...</div>
           ) : orgs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No orgs.</div>
+            <div className="text-sm text-zinc-500">No organizations yet.</div>
           ) : (
-            <div className="divide-y divide-border rounded-lg border">
+            <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
               {orgs.map((o) => (
                 <button
                   key={o.id}
-                  className={[
-                    "w-full text-left p-4 flex items-center justify-between gap-4 hover:bg-accent/40 transition-colors",
-                    o.id === orgID ? "bg-accent/30" : ""
-                  ].join(" ")}
+                  className={["w-full px-4 py-3 text-left transition hover:bg-white/[0.03]", o.id === orgID ? "bg-white/[0.06]" : ""].join(" ")}
                   onClick={() => {
                     setStoredOrgID(o.id);
-                    toast.message(`Selected org: ${o.name}`);
-                    // Reload for pages relying on localStorage.
+                    toast.message(`Selected ${o.name}`);
                     window.location.reload();
                   }}
                 >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{o.name}</div>
-                    <div className="text-sm text-muted-foreground truncate">{o.slug}</div>
-                  </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-zinc-100">{o.name}</div>
+                      <div className="truncate text-xs text-zinc-500">{o.slug}</div>
+                    </div>
                     <Badge variant={o.role === "owner" || o.role === "admin" ? "secondary" : "outline"}>{o.role}</Badge>
-                    <div className="text-xs text-muted-foreground hidden sm:block">{new Date(o.created_at).toLocaleString()}</div>
                   </div>
                 </button>
               ))}
@@ -176,31 +168,21 @@ export default function OrgsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-white/10 bg-black/20">
         <CardHeader>
-          <CardTitle>Members</CardTitle>
-          <CardDescription>
-            {activeOrg ? (
-              <span>
-                Org: <span className="font-medium">{activeOrg.name}</span>
-              </span>
-            ) : (
-              "Select an org."
-            )}
-          </CardDescription>
+          <CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4" />Members</CardTitle>
+          <CardDescription>{activeOrg ? `Org: ${activeOrg.name}` : "Select an organization first."}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="md:col-span-2 space-y-2">
-              <div className="text-sm font-medium">Invite by email</div>
-              <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@example.com" />
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-2 md:col-span-2">
+              <div className="text-xs uppercase tracking-wide text-zinc-500">Invite email</div>
+              <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@example.com" className="border-white/10 bg-white/[0.02]" />
             </div>
             <div className="space-y-2">
-              <div className="text-sm font-medium">Role</div>
-              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as any)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <div className="text-xs uppercase tracking-wide text-zinc-500">Role</div>
+              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "member" | "admin" | "owner")}>
+                <SelectTrigger className="border-white/10 bg-white/[0.02]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="member">member</SelectItem>
                   <SelectItem value="admin">admin</SelectItem>
@@ -209,36 +191,26 @@ export default function OrgsPage() {
               </Select>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Button onClick={invite} disabled={!inviteEmail || !orgID}>
-              Add member
-            </Button>
-            <Button variant="outline" onClick={refreshMembers} disabled={!orgID}>
-              Refresh
-            </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={invite} disabled={!inviteEmail || !orgID} className="gap-2"><UserPlus className="h-4 w-4" />Add member</Button>
+            <Button variant="outline" onClick={refreshMembers} disabled={!orgID} className="border-white/15 bg-transparent hover:bg-white/5">Refresh</Button>
           </div>
 
-          <Separator />
+          <Separator className="bg-white/10" />
 
           {members.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              {activeOrg?.role === "member"
-                ? "You are a member. Admins/owners can view and manage members."
-                : "No members listed (or you don't have permission)."}
-            </div>
+            <div className="text-sm text-zinc-500">No members visible for this org.</div>
           ) : (
-            <div className="divide-y divide-border rounded-lg border">
+            <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
               {members.map((m) => (
-                <div key={m.user_id} className="p-4 flex items-center justify-between gap-4">
+                <div key={m.user_id} className="flex items-center justify-between gap-4 px-4 py-3">
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{m.email}</div>
-                    <div className="text-xs text-muted-foreground">{m.user_id}</div>
+                    <div className="truncate text-sm font-medium text-zinc-100">{m.email}</div>
+                    <div className="truncate font-mono text-[11px] text-zinc-500">{m.user_id}</div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <Badge variant="outline">{m.role}</Badge>
-                    <Button size="sm" variant="destructive" onClick={() => removeMember(m.user_id)}>
-                      Remove
-                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => removeMember(m.user_id)}>Remove</Button>
                   </div>
                 </div>
               ))}
@@ -249,4 +221,3 @@ export default function OrgsPage() {
     </div>
   );
 }
-

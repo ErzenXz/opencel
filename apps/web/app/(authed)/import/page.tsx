@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { Github, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/api";
@@ -52,7 +52,7 @@ export default function ImportPage() {
         toast.error(String(e?.message || e));
       }
       try {
-        const me = (await apiFetch("/api/github/me")) as any;
+        const me = (await apiFetch("/api/github/me")) as { connected: boolean };
         setGhMe(me);
       } catch {
         setGhMe({ connected: false });
@@ -63,7 +63,7 @@ export default function ImportPage() {
   async function loadRepos(q: string) {
     setLoadingRepos(true);
     try {
-      const res = (await apiFetch(`/api/github/repos?query=${encodeURIComponent(q)}&page=1&per_page=30`)) as any;
+      const res = (await apiFetch(`/api/github/repos?query=${encodeURIComponent(q)}&page=1&per_page=30`)) as { repos?: Repo[] };
       setRepos(res.repos || []);
     } catch (e: any) {
       toast.error(String(e?.message || e));
@@ -105,183 +105,130 @@ export default function ImportPage() {
           root_dir: rootDir,
           build_preset: buildPreset
         })
-      })) as any;
-      const p = res.project;
+      })) as { project: { id: string } };
       toast.success("Project imported");
-      router.replace(`/projects/${p.id}`);
+      router.replace(`/projects/${res.project.id}`);
     } catch (e: any) {
-      const msg = String(e?.message || e);
-      toast.error(msg);
+      toast.error(String(e?.message || e));
     }
   }
 
   return (
     <div className="space-y-6">
-      <Card className="relative overflow-hidden border-border/70">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(75%_70%_at_100%_0%,hsl(var(--primary)/0.12),transparent)]" />
-        <CardHeader className="relative">
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 bg-muted/60 px-3 py-1 text-xs text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5" />
-            Guided Import
-          </div>
-          <CardTitle className="text-2xl sm:text-3xl">Bring any GitHub project into OpenCel</CardTitle>
-          <CardDescription className="max-w-2xl">
-            Import web services, static pages, or database tooling with preset defaults, then tune settings before the first deployment.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-5">
+        <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500"><Sparkles className="h-3.5 w-3.5" />Guided Import</div>
+        <h1 className="mt-2 text-2xl font-semibold text-white">Import from GitHub</h1>
+        <p className="mt-1 text-sm text-zinc-400">Select template defaults, choose repo, and create a project in one flow.</p>
+      </div>
 
-      <Card>
+      <Card className="border-white/10 bg-black/20">
         <CardHeader>
-          <CardTitle>0. Template profile</CardTitle>
-          <CardDescription>Pick the project type to prefill sensible defaults.</CardDescription>
+          <CardTitle className="text-base">1. Select template</CardTitle>
+          <CardDescription>Presets optimize root/build defaults for each project style.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {PROJECT_TEMPLATES.map((template) => {
             const Icon = template.icon;
+            const active = templateID === template.id;
             return (
               <button
                 key={template.id}
                 type="button"
                 onClick={() => applyTemplate(template.id)}
                 className={[
-                  "rounded-xl border p-4 text-left transition",
-                  templateID === template.id ? "border-primary/50 bg-primary/5" : "border-border/70 hover:bg-muted/40"
+                  "rounded-lg border p-4 text-left transition",
+                  active ? "border-white/30 bg-white/[0.08]" : "border-white/10 bg-black/30 hover:bg-white/[0.03]"
                 ].join(" ")}
               >
                 <div className="flex items-center justify-between">
-                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <Badge variant={templateID === template.id ? "secondary" : "outline"}>{template.label}</Badge>
+                  <Icon className="h-4 w-4 text-zinc-300" />
+                  <Badge variant={active ? "secondary" : "outline"}>{template.label}</Badge>
                 </div>
-                <div className="mt-3 text-sm text-muted-foreground">{template.description}</div>
+                <p className="mt-3 text-xs text-zinc-500">{template.description}</p>
               </button>
             );
           })}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>1. Organization</CardTitle>
-          <CardDescription>Projects belong to an organization.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select
-            value={orgID}
-            onValueChange={(v) => {
-              setOrgID(v);
-              setStoredOrgID(v);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select an org" />
-            </SelectTrigger>
-            <SelectContent>
-              {orgs.map((o) => (
-                <SelectItem key={o.id} value={o.id}>
-                  {o.name} ({o.role})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="border-white/10 bg-black/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><Github className="h-4 w-4" />2. Repository</CardTitle>
+            <CardDescription>Connect GitHub and choose an organization repository.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Select value={orgID} onValueChange={(v) => { setOrgID(v); setStoredOrgID(v); }}>
+              <SelectTrigger className="border-white/10 bg-white/[0.02]"><SelectValue placeholder="Select organization" /></SelectTrigger>
+              <SelectContent>
+                {orgs.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>{o.name} ({o.role})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>2. GitHub</CardTitle>
-          <CardDescription>Connect your GitHub account to browse repos. You can also paste owner/repo.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {ghMe?.connected ? (
-            <div className="text-sm text-muted-foreground">GitHub connected.</div>
-          ) : (
-            <Button asChild>
-              <a href="/api/auth/github/start?return_to=/import">Connect GitHub</a>
-            </Button>
-          )}
-
-          <Separator />
-
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Repo (owner/repo)</div>
-            <Input value={repoFullName} onChange={(e) => setRepoFullName(e.target.value)} placeholder="owner/repo" />
-          </div>
-
-          {ghMe?.connected ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search repos..." />
-                <Button variant="outline" onClick={() => loadRepos(query)} disabled={loadingRepos}>
-                  {loadingRepos ? "Loading..." : "Search"}
-                </Button>
-              </div>
-
-              {repos.length ? (
-                <div className="divide-y divide-border rounded-lg border">
-                  {repos.slice(0, 12).map((r) => (
-                    <button
-                      key={r.id}
-                      className="w-full text-left p-3 hover:bg-accent transition-colors"
-                      onClick={() => onSelectRepo(r)}
-                      type="button"
-                    >
-                      <div className="font-medium">{r.full_name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {r.private ? "private" : "public"} · default: {r.default_branch} · {new Date(r.updated_at).toLocaleDateString()}
-                      </div>
-                    </button>
-                  ))}
+            {!ghMe?.connected ? (
+              <Button asChild><a href="/api/auth/github/start?return_to=/import">Connect GitHub</a></Button>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search repos..." className="border-white/10 bg-white/[0.02] pl-9" />
+                  </div>
+                  <Button variant="outline" className="border-white/15 bg-transparent hover:bg-white/5" onClick={() => loadRepos(query)} disabled={loadingRepos}>
+                    {loadingRepos ? "Loading..." : "Search"}
+                  </Button>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">{loadingRepos ? "Loading..." : "No repos."}</div>
-              )}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+                <div className="max-h-[330px] overflow-auto rounded-lg border border-white/10">
+                  {repos.length ? (
+                    <div className="divide-y divide-white/10">
+                      {repos.slice(0, 18).map((r) => (
+                        <button key={r.id} className="w-full p-3 text-left hover:bg-white/[0.03]" onClick={() => onSelectRepo(r)} type="button">
+                          <div className="text-sm font-medium text-zinc-100">{r.full_name}</div>
+                          <div className="text-xs text-zinc-500">{r.private ? "private" : "public"} · {r.default_branch}</div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 text-sm text-zinc-500">{loadingRepos ? "Loading..." : "No repositories"}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            <Separator className="bg-white/10" />
+            <Input value={repoFullName} onChange={(e) => setRepoFullName(e.target.value)} placeholder="owner/repo" className="border-white/10 bg-white/[0.02]" />
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>3. Project</CardTitle>
-          <CardDescription>Configure project basics and deployment hints.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Slug</div>
-              <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="my-app" />
+        <Card className="border-white/10 bg-black/20">
+          <CardHeader>
+            <CardTitle className="text-base">3. Configure and import</CardTitle>
+            <CardDescription>Review defaults then create project and open deployment dashboard.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="Project slug" className="border-white/10 bg-white/[0.02]" />
+            <Input value={rootDir} onChange={(e) => setRootDir(e.target.value)} placeholder="Root directory (optional)" className="border-white/10 bg-white/[0.02]" />
+            <Input value={buildPreset} onChange={(e) => setBuildPreset(e.target.value)} placeholder="Build preset (optional)" className="border-white/10 bg-white/[0.02]" />
+
+            <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-zinc-400">
+              <div className="mb-1 text-zinc-200">Recommended for {selectedTemplate.label}</div>
+              <ul className="space-y-1">
+                {selectedTemplate.hints.map((hint) => (
+                  <li key={hint}>- {hint}</li>
+                ))}
+              </ul>
             </div>
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Root directory (optional)</div>
-              <Input value={rootDir} onChange={(e) => setRootDir(e.target.value)} placeholder="." />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={importProject} disabled={!canImport}>Import project</Button>
+              <Button asChild variant="outline" className="border-white/15 bg-transparent hover:bg-white/5">
+                <Link href="/admin">Configure GitHub App</Link>
+              </Button>
             </div>
-          </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Build preset (optional)</div>
-            <Input value={buildPreset} onChange={(e) => setBuildPreset(e.target.value)} placeholder="auto" />
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-            <div className="mb-1 font-medium text-foreground">Recommended for {selectedTemplate.label}</div>
-            <ul className="space-y-1">
-              {selectedTemplate.hints.map((hint) => (
-                <li key={hint}>- {hint}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={importProject} disabled={!canImport}>
-              Import
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/admin">Configure GitHub App</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
-
