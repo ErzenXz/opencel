@@ -12,6 +12,27 @@ set -eu
 
 REPO="${OPENCEL_INSTALL_REPO:-ErzenXz/opencel}"
 VERSION="${OPENCEL_VERSION:-latest}"
+SERVER_BUILD="${OPENCEL_SERVER_BUILD:-1}"
+SERVER_REPO_DIR="${OPENCEL_SERVER_REPO_DIR:-/opt/opencel/repo}"
+
+ensure_git() {
+  if command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+  SUDO=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "git not found. Installing git..."
+    $SUDO apt-get update -y >/dev/null
+    $SUDO apt-get install -y git >/dev/null
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    echo "git is required for server source builds but was not found." >&2
+    exit 1
+  fi
+}
 
 ensure_docker() {
   if command -v docker >/dev/null 2>&1; then
@@ -69,6 +90,27 @@ build_from_source_with_docker() {
     -w /src \
     golang:1.24 \
     /usr/local/go/bin/go build -o /out/opencel ./cmd/opencel
+}
+
+sync_server_repo() {
+  ensure_git
+  repo_url="https://github.com/${REPO}.git"
+  parent_dir="$(dirname "$SERVER_REPO_DIR")"
+  mkdir -p "$parent_dir"
+  if [ -d "$SERVER_REPO_DIR/.git" ]; then
+    echo "Updating server source checkout: $SERVER_REPO_DIR"
+    git -C "$SERVER_REPO_DIR" fetch --all --tags --prune
+    git -C "$SERVER_REPO_DIR" pull --ff-only
+    return 0
+  fi
+  if [ -d "$SERVER_REPO_DIR" ]; then
+    if [ "$(ls -A "$SERVER_REPO_DIR" 2>/dev/null | wc -l)" -gt 0 ]; then
+      echo "Server repo directory exists but is not a git checkout: $SERVER_REPO_DIR" >&2
+      exit 1
+    fi
+  fi
+  echo "Cloning server source checkout: $repo_url -> $SERVER_REPO_DIR"
+  git clone --depth 1 "$repo_url" "$SERVER_REPO_DIR"
 }
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -146,11 +188,26 @@ chmod +x "$tmpdir/opencel"
 cp "$tmpdir/opencel" "$install_dir/opencel"
 
 echo "Installed: $install_dir/opencel"
+if [ "$SERVER_BUILD" = "1" ]; then
+  sync_server_repo
+fi
 if [ "${OPENCEL_INTERACTIVE:-0}" = "1" ]; then
+  if [ "$SERVER_BUILD" = "1" ]; then
+    if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+      exec sudo "$install_dir/opencel" install --tls auto --local-build --repo "$SERVER_REPO_DIR"
+    fi
+    exec "$install_dir/opencel" install --tls auto --local-build --repo "$SERVER_REPO_DIR"
+  fi
   if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
     exec sudo "$install_dir/opencel" install --tls auto
   fi
   exec "$install_dir/opencel" install --tls auto
+fi
+if [ "$SERVER_BUILD" = "1" ]; then
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    exec sudo "$install_dir/opencel" install --tls auto --non-interactive --local-build --repo "$SERVER_REPO_DIR"
+  fi
+  exec "$install_dir/opencel" install --tls auto --non-interactive --local-build --repo "$SERVER_REPO_DIR"
 fi
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
   exec sudo "$install_dir/opencel" install --tls auto --non-interactive
