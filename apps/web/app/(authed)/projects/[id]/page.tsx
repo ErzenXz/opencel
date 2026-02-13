@@ -3,17 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowUpRight, Logs, Rocket, Server, TerminalSquare } from "lucide-react";
+import { ArrowUpRight, ChevronRight, ExternalLink, GitBranch, Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
 import { apiBase, apiFetch } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 type Project = {
   id: string;
@@ -37,6 +42,42 @@ type Deployment = {
 
 type EnvVar = { scope: string; key: string };
 
+function StatusDot({ status }: { status: string }) {
+  const color =
+    status === "READY"
+      ? "bg-emerald-500"
+      : status === "BUILDING" || status === "QUEUED"
+        ? "bg-yellow-500"
+        : status === "ERROR" || status === "FAILED"
+          ? "bg-red-500"
+          : "bg-[#555]";
+  return (
+    <span className="relative flex h-2.5 w-2.5">
+      {(status === "BUILDING" || status === "QUEUED") && (
+        <span
+          className={cn(
+            "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
+            color
+          )}
+        />
+      )}
+      <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", color)} />
+    </span>
+  );
+}
+
+function timeAgo(dateStr: string) {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const projectID = params?.id;
@@ -45,19 +86,27 @@ export default function ProjectPage() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [logsFor, setLogsFor] = useState<string>("");
   const [logs, setLogs] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"deployments" | "env" | "logs">("deployments");
+
+  type TabItem = { id: string; label: string; href?: string };
   const [envScope, setEnvScope] = useState<"preview" | "production">("preview");
   const [envs, setEnvs] = useState<EnvVar[]>([]);
   const [envKey, setEnvKey] = useState("");
   const [envValue, setEnvValue] = useState("");
 
-  const selectedDeployment = useMemo(() => deployments.find((d) => d.id === logsFor) || null, [deployments, logsFor]);
+  const selectedDeployment = useMemo(
+    () => deployments.find((d) => d.id === logsFor) || null,
+    [deployments, logsFor]
+  );
 
   async function refresh() {
     if (!projectID) return;
     try {
       const p = (await apiFetch(`/api/projects/${projectID}`)) as Project;
       setProject(p);
-      const ds = (await apiFetch(`/api/projects/${projectID}/deployments`)) as Deployment[];
+      const ds = (await apiFetch(
+        `/api/projects/${projectID}/deployments`
+      )) as Deployment[];
       setDeployments(ds);
     } catch (e: any) {
       toast.error(String(e?.message || e));
@@ -67,7 +116,9 @@ export default function ProjectPage() {
   async function refreshEnv(scope: "preview" | "production") {
     if (!projectID) return;
     try {
-      const vs = (await apiFetch(`/api/projects/${projectID}/env?scope=${scope}`)) as EnvVar[];
+      const vs = (await apiFetch(
+        `/api/projects/${projectID}/env?scope=${scope}`
+      )) as EnvVar[];
       setEnvs(vs);
     } catch (e: any) {
       toast.error(String(e?.message || e));
@@ -88,6 +139,7 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!logsFor) return;
     setLogs("");
+    setActiveTab("logs");
     const url = `${apiBase()}/api/deployments/${logsFor}/logs`;
     const es = new EventSource(url, { withCredentials: true } as EventSourceInit);
     es.addEventListener("log", (ev: MessageEvent) => {
@@ -104,7 +156,10 @@ export default function ProjectPage() {
 
   async function promote(deploymentID: string) {
     try {
-      await apiFetch(`/api/deployments/${deploymentID}/promote`, { method: "POST", body: "{}" });
+      await apiFetch(`/api/deployments/${deploymentID}/promote`, {
+        method: "POST",
+        body: "{}",
+      });
       toast.success("Promoted to production");
       await refresh();
     } catch (e: any) {
@@ -117,7 +172,7 @@ export default function ProjectPage() {
     try {
       await apiFetch(`/api/projects/${projectID}/env`, {
         method: "POST",
-        body: JSON.stringify({ scope: envScope, key: envKey, value: envValue })
+        body: JSON.stringify({ scope: envScope, key: envKey, value: envValue }),
       });
       toast.success("Saved env var");
       setEnvKey("");
@@ -128,130 +183,393 @@ export default function ProjectPage() {
     }
   }
 
+  const tabs: TabItem[] = [
+    { id: "deployments", label: "Deployments" },
+    { id: "env", label: "Environment Variables" },
+    { id: "logs", label: "Logs" },
+    { id: "analytics", label: "Analytics", href: `/projects/${projectID}/analytics` },
+    { id: "domains", label: "Domains", href: `/projects/${projectID}/domains` },
+    { id: "settings", label: "Settings", href: `/projects/${projectID}/settings` },
+  ];
+
+  const productionDeployment = deployments.find(
+    (d) => d.id === project?.production_deployment_id
+  );
+
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-5">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/projects">Projects</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{project?.slug || "Project"}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <h1 className="mt-3 text-2xl font-semibold text-white">{project?.slug || "Project"}</h1>
-        <p className="mt-1 text-sm text-zinc-400">{project?.repo_full_name}</p>
+      {/* Breadcrumb */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/projects" className="text-[#888] hover:text-white">
+                Projects
+              </Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator>
+            <ChevronRight className="h-3.5 w-3.5 text-[#555]" />
+          </BreadcrumbSeparator>
+          <BreadcrumbItem>
+            <BreadcrumbPage className="text-white">
+              {project?.slug || "Project"}
+            </BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
+      {/* Project Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-white">
+            {project?.slug || "Project"}
+          </h1>
+          <div className="flex items-center gap-2 text-sm text-[#888]">
+            <GitBranch className="h-3.5 w-3.5" />
+            <span>{project?.repo_full_name}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {productionDeployment?.preview_url && (
+            <Button
+              asChild
+              variant="outline"
+              className="gap-2 border-[#333] bg-transparent text-[#ededed] hover:bg-[#111]"
+            >
+              <a
+                href={productionDeployment.preview_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Visit
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </Button>
+          )}
+          <Button
+            asChild
+            variant="outline"
+            className="gap-2 border-[#333] bg-transparent text-[#ededed] hover:bg-[#111]"
+          >
+            <Link href={`/projects/${projectID}/settings`}>
+              <Settings className="h-3.5 w-3.5" />
+              Settings
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Deployments</div><div className="mt-2 text-2xl font-semibold">{deployments.length}</div></CardContent></Card>
-        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Production</div><div className="mt-2">{project?.production_deployment_id ? <Badge variant="secondary">Assigned</Badge> : <Badge variant="outline">Not promoted</Badge>}</div></CardContent></Card>
-        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Log stream</div><div className="mt-2 text-sm text-zinc-300">{selectedDeployment ? selectedDeployment.id.slice(0, 8) : "Idle"}</div></CardContent></Card>
-      </div>
+      {/* Production Status Banner */}
+      {productionDeployment && (
+        <div className="rounded-lg border border-[#333] bg-[#0a0a0a] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <StatusDot status={productionDeployment.status} />
+              <div>
+                <div className="flex items-center gap-2 text-sm text-white">
+                  <span className="font-medium">Production Deployment</span>
+                  <span className="text-[#555]">·</span>
+                  <span className="font-mono text-xs text-[#888]">
+                    {productionDeployment.git_sha.slice(0, 7)}
+                  </span>
+                </div>
+                <div className="text-xs text-[#666]">
+                  {productionDeployment.git_ref.replace("refs/heads/", "")} ·{" "}
+                  {timeAgo(productionDeployment.created_at)}
+                </div>
+              </div>
+            </div>
+            {productionDeployment.preview_url && (
+              <a
+                href={productionDeployment.preview_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-sm text-[#0070f3] hover:underline"
+              >
+                {new URL(productionDeployment.preview_url).hostname}
+                <ArrowUpRight className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="border-white/10 bg-black/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base"><Rocket className="h-4 w-4" />Deployments</CardTitle>
-            <CardDescription>Push to GitHub to trigger a deployment.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {deployments.length === 0 ? (
-              <div className="text-sm text-zinc-500">No deployments yet.</div>
+      {/* Tabs */}
+      <div className="border-b border-[#333]">
+        <nav className="-mb-px flex gap-0">
+          {tabs.map((tab) =>
+            tab.href ? (
+              <Link
+                key={tab.id}
+                href={tab.href}
+                className="relative px-4 py-3 text-sm text-[#888] transition-colors hover:text-[#ededed]"
+              >
+                {tab.label}
+              </Link>
             ) : (
-              <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as "deployments" | "env" | "logs")}
+                className={cn(
+                  "relative px-4 py-3 text-sm transition-colors",
+                  activeTab === tab.id
+                    ? "text-white"
+                    : "text-[#888] hover:text-[#ededed]"
+                )}
+              >
+                {tab.label}
+                {activeTab === tab.id && (
+                  <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-white" />
+                )}
+              </button>
+            )
+          )}
+        </nav>
+      </div>
+
+      {/* Tab Content: Deployments */}
+      {activeTab === "deployments" && (
+        <div>
+          {deployments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#333] py-16 text-center">
+              <p className="text-sm text-[#888]">No deployments yet.</p>
+              <p className="mt-1 text-xs text-[#555]">
+                Push to GitHub to trigger a deployment.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-[#333]">
+              {/* Table header */}
+              <div className="hidden border-b border-[#333] bg-[#0a0a0a] px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#666] md:grid md:grid-cols-[1fr_1fr_120px_100px_140px]">
+                <div>Deployment</div>
+                <div>Branch</div>
+                <div>Status</div>
+                <div>Age</div>
+                <div className="text-right">Actions</div>
+              </div>
+              <div className="divide-y divide-[#222]">
                 {deployments.map((d) => {
                   const branch = d.git_ref.replace("refs/heads/", "");
-                  const isPromoted = project?.production_deployment_id === d.id;
+                  const isProduction =
+                    project?.production_deployment_id === d.id;
                   return (
-                    <div key={d.id} className="space-y-3 p-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={d.status === "READY" ? "secondary" : "outline"}>{d.status}</Badge>
-                        <Badge variant="outline">{d.type}</Badge>
-                        {isPromoted ? <Badge>live</Badge> : null}
-                      </div>
-                      <div className="text-sm text-zinc-400">{branch} · {d.git_sha.slice(0, 7)}</div>
-                      {d.preview_url ? (
-                        <a className="inline-flex items-center gap-1 text-sm text-zinc-200 underline" href={d.preview_url} target="_blank" rel="noreferrer">
-                          Open preview <ArrowUpRight className="h-3.5 w-3.5" />
-                        </a>
-                      ) : null}
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-xs text-zinc-500">{new Date(d.created_at).toLocaleString()}</div>
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="outline" className="border-white/15 bg-transparent hover:bg-white/5" onClick={() => setLogsFor(d.id)}>
-                            <Logs className="mr-1.5 h-3.5 w-3.5" />Logs
-                          </Button>
-                          <Button size="sm" onClick={() => promote(d.id)}>Promote</Button>
+                    <div
+                      key={d.id}
+                      className="group grid cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-[#0a0a0a] md:grid-cols-[1fr_1fr_120px_100px_140px]"
+                      onClick={() => window.location.href = `/projects/${projectID}/deployments/${d.id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <StatusDot status={d.status} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm text-white">
+                              {d.git_sha.slice(0, 7)}
+                            </span>
+                            {isProduction && (
+                              <Badge className="h-5 rounded-sm bg-[#0070f3]/10 px-1.5 text-[10px] font-medium text-[#0070f3] hover:bg-[#0070f3]/20">
+                                Production
+                              </Badge>
+                            )}
+                          </div>
+                          {d.preview_url && (
+                            <a
+                              href={d.preview_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="truncate text-xs text-[#0070f3] hover:underline"
+                            >
+                              {(() => {
+                                try {
+                                  return new URL(d.preview_url).hostname;
+                                } catch {
+                                  return d.preview_url;
+                                }
+                              })()}
+                            </a>
+                          )}
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-sm text-[#888]">
+                        <GitBranch className="h-3 w-3 text-[#555]" />
+                        <span className="truncate">{branch}</span>
+                      </div>
+                      <div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "border-[#333] text-xs",
+                            d.status === "READY" && "border-emerald-800/50 text-emerald-400",
+                            (d.status === "BUILDING" || d.status === "QUEUED") && "border-yellow-800/50 text-yellow-400",
+                            (d.status === "ERROR" || d.status === "FAILED") && "border-red-800/50 text-red-400"
+                          )}
+                        >
+                          {d.status}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-[#666]">
+                        {timeAgo(d.created_at)}
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+                          onClick={(e) => { e.stopPropagation(); setLogsFor(d.id); }}
+                        >
+                          Logs
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          asChild
+                          className="h-7 px-2 text-xs text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+                        >
+                          <Link href={`/projects/${projectID}/deployments/${d.id}`} onClick={(e) => e.stopPropagation()}>
+                            Details
+                          </Link>
+                        </Button>
+                        {!isProduction && d.status === "READY" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs text-[#888] hover:bg-[#1a1a1a] hover:text-white"
+                            onClick={(e) => { e.stopPropagation(); promote(d.id); }}
+                          >
+                            Promote
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-white/10 bg-black/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base"><TerminalSquare className="h-4 w-4" />Live logs</CardTitle>
-            <CardDescription>{selectedDeployment ? `Streaming ${selectedDeployment.id.slice(0, 8)}` : "Select a deployment to stream logs."}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <pre className="min-h-[430px] whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/50 p-4 text-xs leading-5 text-zinc-300">
-              {selectedDeployment ? logs || "(waiting for logs...)" : ""}
-            </pre>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-white/10 bg-black/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Server className="h-4 w-4" />Environment variables</CardTitle>
-          <CardDescription>Values are write-only. Configure preview and production independently.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs value={envScope} onValueChange={(v) => setEnvScope(v as "preview" | "production") }>
-            <TabsList>
-              <TabsTrigger value="preview">Preview</TabsTrigger>
-              <TabsTrigger value="production">Production</TabsTrigger>
-            </TabsList>
-            <TabsContent value="preview" />
-            <TabsContent value="production" />
-          </Tabs>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input placeholder="DATABASE_URL" value={envKey} onChange={(e) => setEnvKey(e.target.value)} className="border-white/10 bg-white/[0.02]" />
-            <Input placeholder="(write-only)" value={envValue} onChange={(e) => setEnvValue(e.target.value)} className="border-white/10 bg-white/[0.02]" />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={setEnv} disabled={!envKey}>Save</Button>
-            <Button variant="outline" className="border-white/15 bg-transparent hover:bg-white/5" onClick={() => refreshEnv(envScope)}>Refresh</Button>
-          </div>
-
-          <Separator className="bg-white/10" />
-
-          {envs.length === 0 ? (
-            <div className="text-sm text-zinc-500">No env vars set for {envScope}.</div>
-          ) : (
-            <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
-              {envs.map((v) => (
-                <div key={`${v.scope}:${v.key}`} className="flex items-center justify-between px-4 py-3">
-                  <div className="font-mono text-sm text-zinc-200">{v.key}</div>
-                  <Badge variant="outline">{v.scope}</Badge>
-                </div>
-              ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* Tab Content: Logs */}
+      {activeTab === "logs" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              {selectedDeployment ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusDot status={selectedDeployment.status} />
+                  <span className="font-mono text-[#ededed]">
+                    {selectedDeployment.id.slice(0, 8)}
+                  </span>
+                  <span className="text-[#555]">·</span>
+                  <span className="text-[#888]">
+                    {selectedDeployment.git_ref.replace("refs/heads/", "")}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-sm text-[#888]">
+                  Select a deployment from the Deployments tab to stream logs.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-[#333]">
+            <div className="border-b border-[#222] bg-[#0a0a0a] px-4 py-2">
+              <span className="text-xs font-medium text-[#666]">
+                Build & Runtime Logs
+              </span>
+            </div>
+            <pre className="min-h-[500px] overflow-auto bg-black p-4 font-mono text-xs leading-6 text-[#ededed]">
+              {selectedDeployment
+                ? logs || "Waiting for logs..."
+                : "No deployment selected."}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: Environment Variables */}
+      {activeTab === "env" && (
+        <div className="space-y-6">
+          {/* Scope toggle */}
+          <div className="flex gap-2">
+            {(["preview", "production"] as const).map((scope) => (
+              <button
+                key={scope}
+                onClick={() => setEnvScope(scope)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm capitalize transition-colors",
+                  envScope === scope
+                    ? "bg-white text-black"
+                    : "bg-[#1a1a1a] text-[#888] hover:text-white"
+                )}
+              >
+                {scope}
+              </button>
+            ))}
+          </div>
+
+          {/* Add form */}
+          <div className="rounded-lg border border-[#333] bg-[#0a0a0a] p-4">
+            <div className="mb-3 text-sm font-medium text-[#ededed]">
+              Add Environment Variable
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Input
+                placeholder="KEY"
+                value={envKey}
+                onChange={(e) => setEnvKey(e.target.value)}
+                className="border-[#333] bg-black font-mono text-sm text-white placeholder:text-[#555]"
+              />
+              <Input
+                placeholder="value"
+                value={envValue}
+                onChange={(e) => setEnvValue(e.target.value)}
+                className="border-[#333] bg-black font-mono text-sm text-white placeholder:text-[#555]"
+              />
+              <Button onClick={setEnv} disabled={!envKey} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Save
+              </Button>
+            </div>
+          </div>
+
+          {/* List */}
+          {envs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#333] py-12 text-center">
+              <p className="text-sm text-[#888]">
+                No environment variables set for {envScope}.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-[#333]">
+              <div className="border-b border-[#333] bg-[#0a0a0a] px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#666]">
+                <div className="grid grid-cols-[1fr_120px]">
+                  <div>Key</div>
+                  <div>Scope</div>
+                </div>
+              </div>
+              <div className="divide-y divide-[#222]">
+                {envs.map((v) => (
+                  <div
+                    key={`${v.scope}:${v.key}`}
+                    className="grid grid-cols-[1fr_120px] items-center px-4 py-3"
+                  >
+                    <div className="font-mono text-sm text-[#ededed]">
+                      {v.key}
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="w-fit border-[#333] text-xs text-[#888]"
+                    >
+                      {v.scope}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

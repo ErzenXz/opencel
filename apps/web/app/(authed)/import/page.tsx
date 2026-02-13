@@ -3,21 +3,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Github, Search, Sparkles } from "lucide-react";
+import { Check, Github, Search } from "lucide-react";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { getStoredOrgID, setStoredOrgID } from "@/components/app-shell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { PROJECT_TEMPLATES, getProjectTemplate, type ProjectTemplate } from "@/lib/project-templates";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  PROJECT_TEMPLATES,
+  getProjectTemplate,
+  type ProjectTemplate,
+} from "@/lib/project-templates";
 
 type Org = { id: string; name: string; slug: string; role: string };
-type Repo = { id: number; full_name: string; private: boolean; default_branch: string; updated_at: string; html_url: string };
+type Repo = {
+  id: number;
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+  updated_at: string;
+  html_url: string;
+};
 
 export default function ImportPage() {
   const router = useRouter();
@@ -34,9 +50,13 @@ export default function ImportPage() {
   const [slug, setSlug] = useState("");
   const [rootDir, setRootDir] = useState("");
   const [buildPreset, setBuildPreset] = useState("");
-  const [templateID, setTemplateID] = useState<ProjectTemplate["id"]>("web-service");
+  const [templateID, setTemplateID] =
+    useState<ProjectTemplate["id"]>("web-service");
 
-  const canImport = useMemo(() => !!orgID && !!repoFullName && !!slug, [orgID, repoFullName, slug]);
+  const canImport = useMemo(
+    () => !!orgID && !!repoFullName && !!slug,
+    [orgID, repoFullName, slug]
+  );
   const selectedTemplate = getProjectTemplate(templateID);
 
   useEffect(() => {
@@ -45,14 +65,17 @@ export default function ImportPage() {
         const os = (await apiFetch("/api/orgs")) as Org[];
         setOrgs(os);
         const stored = getStoredOrgID();
-        const pick = os.find((o) => o.id === stored)?.id || os[0]?.id || "";
+        const pick =
+          os.find((o) => o.id === stored)?.id || os[0]?.id || "";
         setOrgID(pick);
         if (pick) setStoredOrgID(pick);
       } catch (e: any) {
         toast.error(String(e?.message || e));
       }
       try {
-        const me = (await apiFetch("/api/github/me")) as { connected: boolean };
+        const me = (await apiFetch("/api/github/me")) as {
+          connected: boolean;
+        };
         setGhMe(me);
       } catch {
         setGhMe({ connected: false });
@@ -63,7 +86,9 @@ export default function ImportPage() {
   async function loadRepos(q: string) {
     setLoadingRepos(true);
     try {
-      const res = (await apiFetch(`/api/github/repos?query=${encodeURIComponent(q)}&page=1&per_page=30`)) as { repos?: Repo[] };
+      const res = (await apiFetch(
+        `/api/github/repos?query=${encodeURIComponent(q)}&page=1&per_page=30`
+      )) as { repos?: Repo[] };
       setRepos(res.repos || []);
     } catch (e: any) {
       toast.error(String(e?.message || e));
@@ -82,14 +107,18 @@ export default function ImportPage() {
   async function onSelectRepo(r: Repo) {
     setRepoFullName(r.full_name);
     const repoName = r.full_name.split("/")[1] || r.full_name;
-    const s = repoName.toLowerCase().replaceAll(/[^a-z0-9-]+/g, "-").replaceAll(/(^-+)|(-+$)/g, "");
+    const s = repoName
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9-]+/g, "-")
+      .replaceAll(/(^-+)|(-+$)/g, "");
     setSlug(s.slice(0, 32) || "my-app");
   }
 
   function applyTemplate(id: ProjectTemplate["id"]) {
     const t = getProjectTemplate(id);
     setTemplateID(id);
-    if (!repoFullName || repoFullName.includes("owner/")) setRepoFullName(t.suggestedRepo);
+    if (!repoFullName || repoFullName.includes("owner/"))
+      setRepoFullName(t.suggestedRepo);
     if (!buildPreset) setBuildPreset(t.suggestedBuildPreset);
     if (!rootDir) setRootDir(t.suggestedRootDir);
   }
@@ -103,8 +132,8 @@ export default function ImportPage() {
           repo_full_name: repoFullName,
           slug,
           root_dir: rootDir,
-          build_preset: buildPreset
-        })
+          build_preset: buildPreset,
+        }),
       })) as { project: { id: string } };
       toast.success("Project imported");
       router.replace(`/projects/${res.project.id}`);
@@ -114,19 +143,23 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-5">
-        <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500"><Sparkles className="h-3.5 w-3.5" />Guided Import</div>
-        <h1 className="mt-2 text-2xl font-semibold text-white">Import from GitHub</h1>
-        <p className="mt-1 text-sm text-zinc-400">Select template defaults, choose repo, and create a project in one flow.</p>
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-white">
+          Import Project
+        </h1>
+        <p className="mt-1 text-sm text-[#888]">
+          Import a Git repository to deploy it.
+        </p>
       </div>
 
-      <Card className="border-white/10 bg-black/20">
-        <CardHeader>
-          <CardTitle className="text-base">1. Select template</CardTitle>
-          <CardDescription>Presets optimize root/build defaults for each project style.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Template Selection */}
+      <div>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#666]">
+          Framework Preset
+        </h2>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {PROJECT_TEMPLATES.map((template) => {
             const Icon = template.icon;
             const active = templateID === template.id;
@@ -135,99 +168,234 @@ export default function ImportPage() {
                 key={template.id}
                 type="button"
                 onClick={() => applyTemplate(template.id)}
-                className={[
-                  "rounded-lg border p-4 text-left transition",
-                  active ? "border-white/30 bg-white/[0.08]" : "border-white/10 bg-black/30 hover:bg-white/[0.03]"
-                ].join(" ")}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all",
+                  active
+                    ? "border-white bg-[#111] text-white"
+                    : "border-[#333] bg-[#0a0a0a] text-[#888] hover:border-[#555] hover:text-[#ededed]"
+                )}
               >
-                <div className="flex items-center justify-between">
-                  <Icon className="h-4 w-4 text-zinc-300" />
-                  <Badge variant={active ? "secondary" : "outline"}>{template.label}</Badge>
+                <Icon className="h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{template.label}</div>
                 </div>
-                <p className="mt-3 text-xs text-zinc-500">{template.description}</p>
+                {active && (
+                  <Check className="ml-auto h-4 w-4 shrink-0 text-white" />
+                )}
               </button>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-white/10 bg-black/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base"><Github className="h-4 w-4" />2. Repository</CardTitle>
-            <CardDescription>Connect GitHub and choose an organization repository.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Select value={orgID} onValueChange={(v) => { setOrgID(v); setStoredOrgID(v); }}>
-              <SelectTrigger className="border-white/10 bg-white/[0.02]"><SelectValue placeholder="Select organization" /></SelectTrigger>
-              <SelectContent>
-                {orgs.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>{o.name} ({o.role})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="grid gap-8 lg:grid-cols-2">
+        {/* Repository Selection */}
+        <div>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#666]">
+            Import Git Repository
+          </h2>
+          <div className="rounded-lg border border-[#333] bg-[#0a0a0a]">
+            {/* Org selector */}
+            <div className="border-b border-[#333] px-4 py-3">
+              <Select
+                value={orgID}
+                onValueChange={(v) => {
+                  setOrgID(v);
+                  setStoredOrgID(v);
+                }}
+              >
+                <SelectTrigger className="border-[#333] bg-black text-white">
+                  <SelectValue placeholder="Select team" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgs.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name} ({o.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            {!ghMe?.connected ? (
-              <Button asChild><a href="/api/auth/github/start?return_to=/import">Connect GitHub</a></Button>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                    <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search repos..." className="border-white/10 bg-white/[0.02] pl-9" />
-                  </div>
-                  <Button variant="outline" className="border-white/15 bg-transparent hover:bg-white/5" onClick={() => loadRepos(query)} disabled={loadingRepos}>
-                    {loadingRepos ? "Loading..." : "Search"}
+            {/* GitHub connect or repo list */}
+            <div className="p-4">
+              {!ghMe?.connected ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Github className="mb-3 h-8 w-8 text-[#555]" />
+                  <p className="mb-4 text-sm text-[#888]">
+                    Connect your GitHub account to browse repositories.
+                  </p>
+                  <Button asChild className="gap-2">
+                    <a href="/api/auth/github/start?return_to=/import">
+                      <Github className="h-4 w-4" />
+                      Connect GitHub
+                    </a>
                   </Button>
                 </div>
-                <div className="max-h-[330px] overflow-auto rounded-lg border border-white/10">
-                  {repos.length ? (
-                    <div className="divide-y divide-white/10">
-                      {repos.slice(0, 18).map((r) => (
-                        <button key={r.id} className="w-full p-3 text-left hover:bg-white/[0.03]" onClick={() => onSelectRepo(r)} type="button">
-                          <div className="text-sm font-medium text-zinc-100">{r.full_name}</div>
-                          <div className="text-xs text-zinc-500">{r.private ? "private" : "public"} · {r.default_branch}</div>
-                        </button>
-                      ))}
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#555]" />
+                      <Input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search..."
+                        className="border-[#333] bg-black pl-9 text-white placeholder:text-[#555]"
+                      />
                     </div>
-                  ) : (
-                    <div className="p-3 text-sm text-zinc-500">{loadingRepos ? "Loading..." : "No repositories"}</div>
-                  )}
+                    <Button
+                      variant="outline"
+                      className="border-[#333] bg-transparent text-[#ededed] hover:bg-[#111]"
+                      onClick={() => loadRepos(query)}
+                      disabled={loadingRepos}
+                    >
+                      {loadingRepos ? "..." : "Search"}
+                    </Button>
+                  </div>
+                  <div className="max-h-[360px] overflow-auto rounded-md border border-[#333]">
+                    {repos.length ? (
+                      <div className="divide-y divide-[#222]">
+                        {repos.slice(0, 18).map((r) => (
+                          <button
+                            key={r.id}
+                            className={cn(
+                              "flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-[#111]",
+                              repoFullName === r.full_name && "bg-[#111]"
+                            )}
+                            onClick={() => onSelectRepo(r)}
+                            type="button"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm text-white">
+                                {r.full_name}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-[#666]">
+                                <span>{r.private ? "Private" : "Public"}</span>
+                                <span>·</span>
+                                <span>{r.default_branch}</span>
+                              </div>
+                            </div>
+                            {repoFullName === r.full_name ? (
+                              <Check className="h-4 w-4 shrink-0 text-white" />
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="shrink-0 border-[#333] bg-transparent text-xs text-[#ededed] hover:bg-[#1a1a1a]"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectRepo(r);
+                                }}
+                              >
+                                Import
+                              </Button>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-8 text-center text-sm text-[#666]">
+                        {loadingRepos
+                          ? "Loading repositories..."
+                          : "No repositories found."}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              {/* Manual repo input */}
+              <div className="mt-4">
+                <label className="mb-1.5 block text-xs text-[#666]">
+                  Or enter repository manually
+                </label>
+                <Input
+                  value={repoFullName}
+                  onChange={(e) => setRepoFullName(e.target.value)}
+                  placeholder="owner/repo"
+                  className="border-[#333] bg-black text-white placeholder:text-[#555]"
+                />
               </div>
-            )}
-            <Separator className="bg-white/10" />
-            <Input value={repoFullName} onChange={(e) => setRepoFullName(e.target.value)} placeholder="owner/repo" className="border-white/10 bg-white/[0.02]" />
-          </CardContent>
-        </Card>
-
-        <Card className="border-white/10 bg-black/20">
-          <CardHeader>
-            <CardTitle className="text-base">3. Configure and import</CardTitle>
-            <CardDescription>Review defaults then create project and open deployment dashboard.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="Project slug" className="border-white/10 bg-white/[0.02]" />
-            <Input value={rootDir} onChange={(e) => setRootDir(e.target.value)} placeholder="Root directory (optional)" className="border-white/10 bg-white/[0.02]" />
-            <Input value={buildPreset} onChange={(e) => setBuildPreset(e.target.value)} placeholder="Build preset (optional)" className="border-white/10 bg-white/[0.02]" />
-
-            <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-zinc-400">
-              <div className="mb-1 text-zinc-200">Recommended for {selectedTemplate.label}</div>
-              <ul className="space-y-1">
-                {selectedTemplate.hints.map((hint) => (
-                  <li key={hint}>- {hint}</li>
-                ))}
-              </ul>
             </div>
+          </div>
+        </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={importProject} disabled={!canImport}>Import project</Button>
-              <Button asChild variant="outline" className="border-white/15 bg-transparent hover:bg-white/5">
-                <Link href="/admin">Configure GitHub App</Link>
-              </Button>
+        {/* Configure & Deploy */}
+        <div>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#666]">
+            Configure Project
+          </h2>
+          <div className="rounded-lg border border-[#333] bg-[#0a0a0a] p-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm text-[#888]">Project Name</label>
+                <Input
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder="my-app"
+                  className="border-[#333] bg-black text-white placeholder:text-[#555]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-[#888]">
+                  Root Directory{" "}
+                  <span className="text-[#555]">(optional)</span>
+                </label>
+                <Input
+                  value={rootDir}
+                  onChange={(e) => setRootDir(e.target.value)}
+                  placeholder="./"
+                  className="border-[#333] bg-black text-white placeholder:text-[#555]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-[#888]">
+                  Build Preset{" "}
+                  <span className="text-[#555]">(optional)</span>
+                </label>
+                <Input
+                  value={buildPreset}
+                  onChange={(e) => setBuildPreset(e.target.value)}
+                  placeholder="auto"
+                  className="border-[#333] bg-black text-white placeholder:text-[#555]"
+                />
+              </div>
+
+              {/* Template hints */}
+              <div className="rounded-md border border-[#333] bg-black px-4 py-3">
+                <div className="mb-2 text-xs font-medium text-[#888]">
+                  Defaults for {selectedTemplate.label}
+                </div>
+                <ul className="space-y-1 text-xs text-[#666]">
+                  {selectedTemplate.hints.map((hint) => (
+                    <li key={hint} className="flex items-start gap-2">
+                      <span className="mt-1 block h-1 w-1 shrink-0 rounded-full bg-[#555]" />
+                      {hint}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  className="flex-1"
+                  onClick={importProject}
+                  disabled={!canImport}
+                >
+                  Deploy
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-[#333] bg-transparent text-[#ededed] hover:bg-[#111]"
+                >
+                  <Link href="/admin">Configure GitHub App</Link>
+                </Button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

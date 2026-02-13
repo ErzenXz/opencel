@@ -1,21 +1,45 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, PlusCircle, UserPlus, Users } from "lucide-react";
+import { Check, Plus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { getStoredOrgID, setStoredOrgID } from "@/components/app-shell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
-type Org = { id: string; slug: string; name: string; role: string; created_at: string };
-type Member = { user_id: string; email: string; role: string; created_at: string };
+type Org = {
+  id: string;
+  slug: string;
+  name: string;
+  role: string;
+  created_at: string;
+};
+type Member = {
+  user_id: string;
+  email: string;
+  role: string;
+  created_at: string;
+};
 
 export default function OrgsPage() {
   const [orgs, setOrgs] = useState<Org[]>([]);
@@ -24,10 +48,15 @@ export default function OrgsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"member" | "admin" | "owner">("member");
+  const [inviteRole, setInviteRole] = useState<"member" | "admin" | "owner">(
+    "member"
+  );
 
   const orgID = useMemo(() => getStoredOrgID(), []);
-  const activeOrg = useMemo(() => orgs.find((o) => o.id === orgID) || null, [orgs, orgID]);
+  const activeOrg = useMemo(
+    () => orgs.find((o) => o.id === orgID) || null,
+    [orgs, orgID]
+  );
 
   async function refreshOrgs() {
     setLoading(true);
@@ -64,8 +93,11 @@ export default function OrgsPage() {
 
   async function createOrg() {
     try {
-      const o = (await apiFetch("/api/orgs", { method: "POST", body: JSON.stringify({ name: newOrgName }) })) as Org;
-      toast.success("Organization created");
+      const o = (await apiFetch("/api/orgs", {
+        method: "POST",
+        body: JSON.stringify({ name: newOrgName }),
+      })) as Org;
+      toast.success("Team created");
       setCreateOpen(false);
       setNewOrgName("");
       setOrgs((prev) => [...prev, o]);
@@ -79,7 +111,10 @@ export default function OrgsPage() {
   async function invite() {
     if (!orgID) return;
     try {
-      await apiFetch(`/api/orgs/${orgID}/members`, { method: "POST", body: JSON.stringify({ email: inviteEmail, role: inviteRole }) });
+      await apiFetch(`/api/orgs/${orgID}/members`, {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
       toast.success("Member added");
       setInviteEmail("");
       setInviteRole("member");
@@ -92,7 +127,9 @@ export default function OrgsPage() {
   async function removeMember(userID: string) {
     if (!orgID) return;
     try {
-      await apiFetch(`/api/orgs/${orgID}/members/${userID}`, { method: "DELETE" });
+      await apiFetch(`/api/orgs/${orgID}/members/${userID}`, {
+        method: "DELETE",
+      });
       toast.success("Member removed");
       refreshMembers();
     } catch (e: any) {
@@ -101,123 +138,222 @@ export default function OrgsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-5">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-zinc-500">Team Management</div>
-          <h1 className="mt-2 text-2xl font-semibold text-white">Organizations</h1>
-          <p className="mt-1 text-sm text-zinc-400">Manage org workspaces, roles, and invites.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-white">
+            Teams
+          </h1>
+          <p className="mt-1 text-sm text-[#888]">
+            Manage your teams, members, and roles.
+          </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2"><PlusCircle className="h-4 w-4" />Create org</Button>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Team
+            </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="border-[#333] bg-[#0a0a0a]">
             <DialogHeader>
-              <DialogTitle>Create organization</DialogTitle>
-              <DialogDescription>Creates a new organization and makes you owner.</DialogDescription>
+              <DialogTitle className="text-white">Create Team</DialogTitle>
+              <DialogDescription className="text-[#888]">
+                Creates a new team and makes you owner.
+              </DialogDescription>
             </DialogHeader>
-            <Input value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} placeholder="Acme" />
+            <Input
+              value={newOrgName}
+              onChange={(e) => setNewOrgName(e.target.value)}
+              placeholder="Team name"
+              className="border-[#333] bg-black text-white placeholder:text-[#555]"
+            />
             <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button onClick={createOrg} disabled={!newOrgName}>Create</Button>
+              <Button
+                variant="outline"
+                onClick={() => setCreateOpen(false)}
+                className="border-[#333] bg-transparent text-[#ededed] hover:bg-[#111]"
+              >
+                Cancel
+              </Button>
+              <Button onClick={createOrg} disabled={!newOrgName}>
+                Create
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Organizations</div><div className="mt-2 text-xl font-semibold">{orgs.length}</div></CardContent></Card>
-        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Active workspace</div><div className="mt-2 text-sm font-medium truncate">{activeOrg?.name || "None"}</div></CardContent></Card>
-        <Card className="border-white/10 bg-black/20"><CardContent className="p-4"><div className="text-xs text-zinc-500">Members listed</div><div className="mt-2 text-xl font-semibold">{members.length}</div></CardContent></Card>
+      {/* Teams List */}
+      <div>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#666]">
+          Your Teams
+        </h2>
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-[72px] animate-pulse rounded-lg border border-[#333] bg-[#0a0a0a]"
+              />
+            ))}
+          </div>
+        ) : orgs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#333] py-12 text-center">
+            <p className="text-sm text-[#888]">No teams yet.</p>
+            <Button
+              size="sm"
+              className="mt-3"
+              onClick={() => setCreateOpen(true)}
+            >
+              Create your first team
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {orgs.map((o) => (
+              <button
+                key={o.id}
+                className={cn(
+                  "flex w-full items-center gap-4 rounded-lg border px-4 py-4 text-left transition-colors",
+                  o.id === orgID
+                    ? "border-[#555] bg-[#111]"
+                    : "border-[#333] bg-[#0a0a0a] hover:border-[#555] hover:bg-[#111]"
+                )}
+                onClick={() => {
+                  setStoredOrgID(o.id);
+                  toast.message(`Switched to ${o.name}`);
+                  window.location.reload();
+                }}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#333] to-[#555] text-sm font-bold uppercase text-white">
+                  {o.name.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">
+                      {o.name}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="border-[#333] text-[10px] text-[#888]"
+                    >
+                      {o.role}
+                    </Badge>
+                  </div>
+                  <div className="truncate text-xs text-[#666]">{o.slug}</div>
+                </div>
+                {o.id === orgID && (
+                  <Check className="h-4 w-4 shrink-0 text-white" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <Card className="border-white/10 bg-black/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Building2 className="h-4 w-4" />Your organizations</CardTitle>
-          <CardDescription>Select a workspace to scope projects and members.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-sm text-zinc-500">Loading organizations...</div>
-          ) : orgs.length === 0 ? (
-            <div className="text-sm text-zinc-500">No organizations yet.</div>
-          ) : (
-            <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
-              {orgs.map((o) => (
-                <button
-                  key={o.id}
-                  className={["w-full px-4 py-3 text-left transition hover:bg-white/[0.03]", o.id === orgID ? "bg-white/[0.06]" : ""].join(" ")}
-                  onClick={() => {
-                    setStoredOrgID(o.id);
-                    toast.message(`Selected ${o.name}`);
-                    window.location.reload();
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-zinc-100">{o.name}</div>
-                      <div className="truncate text-xs text-zinc-500">{o.slug}</div>
-                    </div>
-                    <Badge variant={o.role === "owner" || o.role === "admin" ? "secondary" : "outline"}>{o.role}</Badge>
-                  </div>
-                </button>
-              ))}
+      {/* Members */}
+      {activeOrg && (
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Members</h2>
+              <p className="text-sm text-[#888]">{activeOrg.name}</p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
 
-      <Card className="border-white/10 bg-black/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4" />Members</CardTitle>
-          <CardDescription>{activeOrg ? `Org: ${activeOrg.name}` : "Select an organization first."}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2 md:col-span-2">
-              <div className="text-xs uppercase tracking-wide text-zinc-500">Invite email</div>
-              <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@example.com" className="border-white/10 bg-white/[0.02]" />
+          {/* Invite form */}
+          <div className="mb-6 rounded-lg border border-[#333] bg-[#0a0a0a] p-4">
+            <div className="mb-3 text-sm font-medium text-[#ededed]">
+              Invite Member
             </div>
-            <div className="space-y-2">
-              <div className="text-xs uppercase tracking-wide text-zinc-500">Role</div>
-              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "member" | "admin" | "owner")}>
-                <SelectTrigger className="border-white/10 bg-white/[0.02]"><SelectValue /></SelectTrigger>
+            <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
+              <Input
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="user@example.com"
+                className="border-[#333] bg-black text-white placeholder:text-[#555]"
+              />
+              <Select
+                value={inviteRole}
+                onValueChange={(v) =>
+                  setInviteRole(v as "member" | "admin" | "owner")
+                }
+              >
+                <SelectTrigger className="border-[#333] bg-black text-white">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="member">member</SelectItem>
                   <SelectItem value="admin">admin</SelectItem>
                   <SelectItem value="owner">owner</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                onClick={invite}
+                disabled={!inviteEmail || !orgID}
+                className="gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Invite
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={invite} disabled={!inviteEmail || !orgID} className="gap-2"><UserPlus className="h-4 w-4" />Add member</Button>
-            <Button variant="outline" onClick={refreshMembers} disabled={!orgID} className="border-white/15 bg-transparent hover:bg-white/5">Refresh</Button>
-          </div>
 
-          <Separator className="bg-white/10" />
-
+          {/* Members list */}
           {members.length === 0 ? (
-            <div className="text-sm text-zinc-500">No members visible for this org.</div>
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#333] py-12 text-center">
+              <p className="text-sm text-[#888]">No members visible.</p>
+            </div>
           ) : (
-            <div className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
-              {members.map((m) => (
-                <div key={m.user_id} className="flex items-center justify-between gap-4 px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-zinc-100">{m.email}</div>
-                    <div className="truncate font-mono text-[11px] text-zinc-500">{m.user_id}</div>
+            <div className="overflow-hidden rounded-lg border border-[#333]">
+              <div className="hidden border-b border-[#333] bg-[#0a0a0a] px-4 py-3 text-xs font-medium uppercase tracking-wider text-[#666] md:grid md:grid-cols-[1fr_100px_100px]">
+                <div>Member</div>
+                <div>Role</div>
+                <div className="text-right">Actions</div>
+              </div>
+              <div className="divide-y divide-[#222]">
+                {members.map((m) => (
+                  <div
+                    key={m.user_id}
+                    className="flex items-center justify-between gap-4 px-4 py-3 md:grid md:grid-cols-[1fr_100px_100px]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-xs font-bold text-white">
+                        {m.email.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm text-white">
+                          {m.email}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <Badge
+                        variant="outline"
+                        className="border-[#333] text-xs text-[#888]"
+                      >
+                        {m.role}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                        onClick={() => removeMember(m.user_id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{m.role}</Badge>
-                    <Button size="sm" variant="destructive" onClick={() => removeMember(m.user_id)}>Remove</Button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   );
 }

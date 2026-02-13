@@ -3,13 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Github } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+function VercelLogo() {
+  return (
+    <svg height="26" viewBox="0 0 76 65" fill="currentColor">
+      <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -58,52 +65,84 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(70%_70%_at_100%_0%,hsl(var(--primary)/0.12),transparent)] p-6">
-      <div className="mx-auto grid min-h-[calc(100vh-3rem)] w-full max-w-5xl grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="border-border/70 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-muted/60 px-3 py-1 text-xs text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5" />
-              OpenCel Dashboard
-            </div>
-            <CardTitle className="text-3xl tracking-tight">Open source cloud, on your own terms</CardTitle>
-            <CardDescription>Deploy GitHub projects with preview links, logs, and production promotion in one control plane.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>- Vercel-like workflow without platform lock-in</p>
-            <p>- Great for web services, static sites, and database tooling</p>
-            <p>- Self-hosted and OSS from the first commit</p>
-          </CardContent>
-        </Card>
+    <main className="flex min-h-screen flex-col items-center justify-center px-4">
+      <div className="w-full max-w-[360px]">
+        {/* Logo */}
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <VercelLogo />
+          <h1 className="text-2xl font-semibold tracking-tight text-white">
+            Log in to OpenCel
+          </h1>
+        </div>
 
-        <Card className="w-full border-border/70">
-          <CardHeader>
-            <CardTitle>Login</CardTitle>
-            <CardDescription>Sign in to your OpenCel dashboard.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {gh?.configured ? (
-              <Button asChild variant="secondary" className="w-full">
-                <a href="/api/auth/github/start?return_to=/projects">Continue with GitHub</a>
+        <div className="space-y-4">
+          {/* GitHub OAuth */}
+          {gh?.configured && (
+            <>
+              <Button asChild variant="outline" className="h-11 w-full gap-2 border-[#333] bg-transparent text-[#ededed] hover:bg-[#111] hover:text-white">
+                <a href="/api/auth/github/start?return_to=/projects">
+                  <Github className="h-5 w-5" />
+                  Continue with GitHub
+                </a>
               </Button>
-            ) : null}
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Email</div>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-            </div>
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Password</div>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-            </div>
-            <Button className="w-full gap-2" onClick={onSubmit} disabled={submitting}>
-              {submitting ? "Signing in..." : "Sign in"}
-              {submitting ? null : <ArrowRight className="h-4 w-4" />}
-            </Button>
-            <div className="text-center text-xs text-muted-foreground">
-              New here? <Link href="/setup" className="underline underline-offset-4">Run initial setup</Link>
-            </div>
-          </CardContent>
-        </Card>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-[#333]" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-black px-3 text-[#666]">or</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Email / Password */}
+          <div className="space-y-2">
+            <label className="text-sm text-[#888]">Email Address</label>
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+              className="h-11 border-[#333] bg-black text-white placeholder:text-[#555] focus-visible:ring-white"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm text-[#888]">Password</label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Enter password"
+              className="h-11 border-[#333] bg-black text-white placeholder:text-[#555] focus-visible:ring-white"
+            />
+          </div>
+
+          <Button
+            className="h-11 w-full gap-2 font-medium"
+            onClick={onSubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </Button>
+
+          <p className="text-center text-[13px] text-[#666]">
+            First time?{" "}
+            <Link href="/setup" className="text-white underline underline-offset-4 hover:text-[#ededed]">
+              Run initial setup
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );
