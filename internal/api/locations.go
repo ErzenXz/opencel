@@ -331,6 +331,26 @@ func (s *Server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
 		return
 	}
+	// A bare DeleteNode relies on ON DELETE SET NULL to detach services, but
+	// that leaves their containers running on the node with no way to reach
+	// them (node is gone, node_id is null). Require the caller to drain the
+	// node first — otherwise they'll create permanent orphans.
+	svcs, err := s.Store.ListServicesByNode(r.Context(), id)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if len(svcs) > 0 {
+		names := make([]string, 0, len(svcs))
+		for _, sv := range svcs {
+			names = append(names, sv.Name)
+		}
+		writeJSON(w, 409, map[string]any{
+			"error":    "node has services; delete or migrate them before removing the node",
+			"services": names,
+		})
+		return
+	}
 	if err := s.Store.DeleteNode(r.Context(), id); err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return

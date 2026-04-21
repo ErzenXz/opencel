@@ -325,6 +325,31 @@ func (s *Store) CreateService(ctx context.Context, p CreateServiceParams) (*Serv
 	return &sv, nil
 }
 
+func (s *Store) ListServicesByNode(ctx context.Context, nodeID string) ([]Service, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, org_id, location_id, node_id, name, kind, version, status, container_name, internal_host, internal_port,
+		       username, database_name, password_enc, config_json, error_message, created_at, updated_at
+		FROM services
+		WHERE node_id = $1
+		ORDER BY created_at DESC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Service
+	for rows.Next() {
+		var sv Service
+		if err := rows.Scan(&sv.ID, &sv.OrgID, &sv.LocationID, &sv.NodeID, &sv.Name, &sv.Kind, &sv.Version, &sv.Status,
+			&sv.ContainerName, &sv.InternalHost, &sv.InternalPort, &sv.Username, &sv.DatabaseName,
+			&sv.PasswordEnc, &sv.ConfigJSON, &sv.ErrorMessage, &sv.CreatedAt, &sv.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, sv)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListServicesByOrg(ctx context.Context, orgID string) ([]Service, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT id, org_id, location_id, node_id, name, kind, version, status, container_name, internal_host, internal_port,

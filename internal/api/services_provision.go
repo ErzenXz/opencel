@@ -26,6 +26,12 @@ func (s *Server) provisionService(serviceID string) {
 	if err != nil || sv == nil {
 		return
 	}
+	// A concurrent DELETE may have flipped us to 'deleting' before we got
+	// here; if so, bail out so we don't create a container for a record
+	// that's about to be removed.
+	if sv.Status == "deleting" {
+		return
+	}
 	if sv.NodeID.String == "" {
 		_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "no node bound")
 		return
@@ -72,6 +78,30 @@ func (s *Server) provisionService(serviceID string) {
 	}
 	if provErr != nil {
 		_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", provErr.Error())
+		return
+	}
+	// Race: the admin may have hit Delete while we were pulling the image /
+	// starting the container. Re-check the status — if the service has been
+	// flipped to 'deleting' (or removed), unwind the container we just
+	// created instead of stamping it 'running'. Otherwise the delete
+	// handler's captured container_name would be empty and the container
+	// would outlive its DB record on this node.
+	cur, cerr := s.Store.GetService(ctx, sv.ID)
+	if cerr != nil || cur == nil || cur.Status == "deleting" {
+		if n.Role != "primary" && n.AgentURL.String != "" {
+			var agentToken string
+			if len(n.TokenEnc) > 0 {
+				if v, derr := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); derr == nil {
+					agentToken = string(v)
+				}
+			}
+			_ = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, info.ContainerName)
+		} else {
+			_ = removeServiceContainer(info.ContainerName)
+		}
+		if cur != nil {
+			_ = s.Store.DeleteService(ctx, sv.ID)
+		}
 		return
 	}
 	_ = s.Store.UpdateServiceRunning(ctx, sv.ID, info)
