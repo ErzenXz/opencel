@@ -4,22 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BarChart3,
   Building2,
   ChevronDown,
-  Clock,
   Database,
   FolderKanban,
   Home,
   Import,
   LogOut,
+  MapPin,
   Menu,
-  Plug,
-  ScrollText,
   Search,
+  Server,
   Settings,
   Shield,
-  Wallet,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,10 +31,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CommandPalette } from "@/components/command-palette";
-import { FeedbackWidget } from "@/components/feedback-widget";
 import { SystemStatusBanner } from "@/components/system-status";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts";
-import { NotificationBell } from "@/components/notification-bell";
 
 export type Me = { id: string; email: string; is_instance_admin?: boolean };
 export type Org = { id: string; slug: string; name: string; role: string };
@@ -60,11 +55,32 @@ export function setStoredOrgID(id: string) {
   }
 }
 
-function VercelLogo() {
+function OrgAvatar({
+  name,
+  size = "sm",
+}: {
+  name: string | undefined;
+  size?: "sm" | "md";
+}) {
+  const letter = (name?.charAt(0) || "?").toUpperCase();
   return (
-    <svg height="22" viewBox="0 0 76 65" fill="currentColor">
-      <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-    </svg>
+    <div
+      className={cn(
+        "flex items-center justify-center rounded-md border border-[#333] bg-[#111] font-semibold text-[#ededed]",
+        size === "sm" ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-xs"
+      )}
+    >
+      {letter}
+    </div>
+  );
+}
+
+function UserAvatar({ email }: { email: string }) {
+  const letter = (email?.charAt(0) || "?").toUpperCase();
+  return (
+    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#333] bg-[#111] text-xs font-semibold text-white transition-colors hover:border-[#555]">
+      {letter}
+    </div>
   );
 }
 
@@ -132,7 +148,7 @@ export function AppShell({
       <main className="flex min-h-screen items-center justify-center">
         <div className="flex items-center gap-3">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#333] border-t-white" />
-          <span className="text-sm text-[#888]">Loading...</span>
+          <span className="text-sm text-[#888]">Loading…</span>
         </div>
       </main>
     );
@@ -143,12 +159,9 @@ export function AppShell({
   const nav = [
     { href: "/dashboard", label: "Overview", icon: Home },
     { href: "/projects", label: "Projects", icon: FolderKanban },
-    { href: "/storage", label: "Storage", icon: Database },
-    { href: "/integrations", label: "Integrations", icon: Plug },
-    { href: "/analytics", label: "Analytics", icon: BarChart3 },
-    { href: "/logs", label: "Logs", icon: ScrollText },
-    { href: "/cron", label: "Cron", icon: Clock },
-    { href: "/usage", label: "Usage", icon: Wallet },
+    { href: "/databases", label: "Databases", icon: Database },
+    { href: "/locations", label: "Locations", icon: MapPin },
+    { href: "/nodes", label: "Nodes", icon: Server },
     { href: "/import", label: "Import", icon: Import },
     { href: "/orgs", label: "Teams", icon: Building2 },
     { href: "/settings", label: "Settings", icon: Settings },
@@ -159,51 +172,41 @@ export function AppShell({
 
   return (
     <div className="min-h-screen">
-      {/* System Status Banner */}
       <SystemStatusBanner />
-
-      {/* Command Palette */}
       <CommandPalette me={me} />
       <KeyboardShortcutsDialog />
 
-      {/* ─── Top Navigation Bar ─── */}
-      <header className="sticky top-0 z-50 border-b border-[#333] bg-black/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1200px] items-center gap-4 px-6">
-          {/* Logo */}
+      <header className="sticky top-0 z-40 border-b border-[#1f1f1f] bg-black/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-6">
           <Link
             href="/dashboard"
-            className="flex shrink-0 items-center text-white transition-opacity hover:opacity-80"
+            className="flex shrink-0 items-center gap-2 text-white transition-colors hover:text-[#ededed]"
           >
-            <VercelLogo />
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 12h4l3 -8 4 16 3 -8h4" />
+            </svg>
+            <span className="text-sm font-semibold tracking-tight">
+              OpenCel
+            </span>
           </Link>
 
-          {/* Separator */}
-          <svg
-            className="shrink-0 text-[#333]"
-            width="24"
-            height="32"
-            viewBox="0 0 24 32"
-            fill="none"
-          >
-            <line
-              x1="14.5"
-              y1="2"
-              x2="8.5"
-              y2="30"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
+          <span className="h-5 w-px shrink-0 bg-[#2a2a2a]" aria-hidden />
 
-          {/* Org Switcher */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-[#ededed] transition-colors hover:bg-[#1a1a1a]">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#333] to-[#555] text-[10px] font-bold uppercase">
-                  {activeOrg?.name?.charAt(0) || "?"}
-                </div>
-                <span className="max-w-[140px] truncate">
+              <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[#ededed] transition-colors hover:bg-[#141414]">
+                <OrgAvatar name={activeOrg?.name} />
+                <span className="max-w-[160px] truncate">
                   {activeOrg ? activeOrg.name : "Select team"}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 text-[#666]" />
@@ -215,7 +218,7 @@ export function AppShell({
                   key={o.id}
                   className={cn(
                     "flex items-center gap-3 py-2.5",
-                    o.id === orgID && "bg-[#1a1a1a]"
+                    o.id === orgID && "bg-[#141414]"
                   )}
                   onClick={() => {
                     setOrgID(o.id);
@@ -223,9 +226,7 @@ export function AppShell({
                     router.refresh();
                   }}
                 >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#333] to-[#555] text-[10px] font-bold uppercase">
-                    {o.name.charAt(0)}
-                  </div>
+                  <OrgAvatar name={o.name} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm">{o.name}</div>
                     <div className="truncate text-xs text-[#666]">{o.role}</div>
@@ -235,11 +236,16 @@ export function AppShell({
                   )}
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/orgs" className="text-[#ededed]">
+                  Manage teams
+                </Link>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Desktop Nav Tabs */}
-          <nav className="ml-2 hidden h-full items-center gap-0.5 md:flex">
+          <nav className="ml-1 hidden h-full items-center gap-0.5 md:flex">
             {nav.map((n) => {
               const active =
                 pathname === n.href || pathname.startsWith(`${n.href}/`);
@@ -254,16 +260,17 @@ export function AppShell({
                 >
                   {n.label}
                   {active && (
-                    <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-white" />
+                    <span
+                      className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-white"
+                      aria-hidden
+                    />
                   )}
                 </Link>
               );
             })}
           </nav>
 
-          {/* Right Side */}
           <div className="ml-auto flex items-center gap-2">
-            {/* ⌘K search trigger */}
             <button
               onClick={() => {
                 window.dispatchEvent(
@@ -273,22 +280,19 @@ export function AppShell({
                   })
                 );
               }}
-              className="hidden items-center gap-2 rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-1.5 text-xs text-[#666] transition-colors hover:border-[#555] hover:text-[#888] sm:flex"
+              className="hidden items-center gap-2 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 py-1.5 text-xs text-[#666] transition-colors hover:border-[#3a3a3a] hover:text-[#888] sm:flex"
             >
               <Search className="h-3.5 w-3.5" />
-              <span>Search...</span>
-              <kbd className="ml-2 rounded border border-[#333] bg-[#111] px-1 py-0.5 text-[10px] font-medium">
+              <span>Search…</span>
+              <kbd className="ml-2 rounded border border-[#2a2a2a] bg-[#111] px-1 py-0.5 text-[10px] font-medium">
                 ⌘K
               </kbd>
             </button>
 
-            {/* Notifications */}
-            <NotificationBell />
-
-            {/* Mobile menu toggle */}
             <button
-              className="flex h-9 w-9 items-center justify-center rounded-md text-[#888] transition-colors hover:bg-[#1a1a1a] hover:text-white md:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-[#888] transition-colors hover:bg-[#141414] hover:text-white md:hidden"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             >
               {mobileMenuOpen ? (
                 <X className="h-5 w-5" />
@@ -297,48 +301,51 @@ export function AppShell({
               )}
             </button>
 
-            {/* User Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-xs font-bold text-white ring-1 ring-[#333] transition-all hover:ring-[#555]">
-                  {me.email.slice(0, 1).toUpperCase()}
+                <button aria-label="Account">
+                  <UserAvatar email={me.email} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[220px]">
-                <div className="px-2 py-2">
+                <div className="px-2 py-1.5">
+                  <div className="truncate text-xs text-[#888]">
+                    Signed in as
+                  </div>
                   <div className="truncate text-sm text-[#ededed]">
                     {me.email}
-                  </div>
-                  <div className="text-xs text-[#666]">
-                    {activeOrg?.name || "No team"}
                   </div>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/settings" className="gap-2">
-                    <Settings className="h-4 w-4" />
-                    Settings
+                  <Link href="/settings" className="text-[#ededed]">
+                    Account settings
                   </Link>
                 </DropdownMenuItem>
+                {me.is_instance_admin && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin" className="text-[#ededed]">
+                      Instance admin
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={onLogout}
-                  className="gap-2 text-red-400 focus:text-red-400"
+                  className="text-[#ededed]"
                 >
-                  <LogOut className="h-4 w-4" />
-                  Log out
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        {/* Mobile Nav */}
         {mobileMenuOpen && (
-          <div className="border-t border-[#333] bg-black px-6 py-3 md:hidden">
-            <nav className="flex flex-col gap-1">
+          <div className="border-t border-[#1f1f1f] bg-black md:hidden">
+            <nav className="mx-auto flex max-w-[1400px] flex-col gap-1 px-4 py-3">
               {nav.map((n) => {
-                const Icon = n.icon;
                 const active =
                   pathname === n.href || pathname.startsWith(`${n.href}/`);
                 return (
@@ -347,40 +354,23 @@ export function AppShell({
                     href={n.href}
                     onClick={() => setMobileMenuOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                       active
-                        ? "bg-[#1a1a1a] text-white"
-                        : "text-[#888] hover:bg-[#111] hover:text-[#ededed]"
+                        ? "bg-[#141414] text-white"
+                        : "text-[#ededed] hover:bg-[#141414]"
                     )}
                   >
-                    <Icon className="h-4 w-4" />
+                    <n.icon className="h-4 w-4" />
                     {n.label}
                   </Link>
                 );
               })}
-              <div className="my-2 h-px bg-[#333]" />
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onLogout();
-                }}
-                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-red-400 transition-colors hover:bg-[#111]"
-              >
-                <LogOut className="h-4 w-4" />
-                Log out
-              </button>
             </nav>
           </div>
         )}
       </header>
 
-      {/* ─── Content ─── */}
-      <main className="mx-auto w-full max-w-[1200px] px-6 py-8">
-        {children}
-      </main>
-
-      {/* Feedback Widget */}
-      <FeedbackWidget />
+      <main className="mx-auto max-w-[1400px] px-6 py-8">{children}</main>
     </div>
   );
 }

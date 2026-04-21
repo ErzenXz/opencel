@@ -14,6 +14,8 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newUpdateCmd())
+	root.AddCommand(newJoinCmd())
+	root.AddCommand(newAgentCmd())
 
 	return root
 }

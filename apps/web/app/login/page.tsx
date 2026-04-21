@@ -9,14 +9,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-function VercelLogo() {
-  return (
-    <svg height="26" viewBox="0 0 76 65" fill="currentColor">
-      <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-    </svg>
-  );
-}
+import { OpencelLogo } from "@/components/opencel-logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,11 +61,14 @@ export default function LoginPage() {
     <main className="flex min-h-screen flex-col items-center justify-center px-4">
       <div className="w-full max-w-[360px]">
         {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-4">
-          <VercelLogo />
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
-            Log in to OpenCel
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <OpencelLogo size={32} className="text-white" />
+          <h1 className="text-[22px] font-semibold tracking-tight text-white">
+            Sign in to OpenCel
           </h1>
+          <p className="text-sm text-[#888]">
+            Your self-hosted deployment platform.
+          </p>
         </div>
 
         <div className="space-y-4">

@@ -1,0 +1,343 @@
+package api
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/opencel/opencel/internal/crypto/envcrypt"
+	"github.com/opencel/opencel/internal/db"
+)
+
+type serviceResp struct {
+	ID            string    `json:"id"`
+	OrgID         string    `json:"org_id"`
+	LocationID    string    `json:"location_id,omitempty"`
+	NodeID        string    `json:"node_id,omitempty"`
+	Name          string    `json:"name"`
+	Kind          string    `json:"kind"`
+	Version       string    `json:"version"`
+	Status        string    `json:"status"`
+	ContainerName string    `json:"container_name,omitempty"`
+	InternalHost  string    `json:"internal_host,omitempty"`
+	InternalPort  int       `json:"internal_port,omitempty"`
+	Username      string    `json:"username,omitempty"`
+	DatabaseName  string    `json:"database_name,omitempty"`
+	ErrorMessage  string    `json:"error_message,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func toServiceResp(sv db.Service) serviceResp {
+	return serviceResp{
+		ID:            sv.ID,
+		OrgID:         sv.OrgID,
+		LocationID:    sv.LocationID.String,
+		NodeID:        sv.NodeID.String,
+		Name:          sv.Name,
+		Kind:          sv.Kind,
+		Version:       sv.Version,
+		Status:        sv.Status,
+		ContainerName: sv.ContainerName.String,
+		InternalHost:  sv.InternalHost.String,
+		InternalPort:  int(sv.InternalPort.Int64),
+		Username:      sv.Username.String,
+		DatabaseName:  sv.DatabaseName.String,
+		ErrorMessage:  sv.ErrorMessage.String,
+		CreatedAt:     sv.CreatedAt,
+		UpdatedAt:     sv.UpdatedAt,
+	}
+}
+
+var supportedKinds = map[string]bool{
+	"postgres": true,
+	"redis":    true,
+	"mysql":    true,
+	"mongodb":  true,
+}
+
+func defaultVersionForKind(k string) string {
+	switch k {
+	case "postgres":
+		return "16"
+	case "redis":
+		return "7"
+	case "mysql":
+		return "8"
+	case "mongodb":
+		return "7"
+	default:
+		return "latest"
+	}
+}
+
+func defaultPortForKind(k string) int {
+	switch k {
+	case "postgres":
+		return 5432
+	case "redis":
+		return 6379
+	case "mysql":
+		return 3306
+	case "mongodb":
+		return 27017
+	default:
+		return 0
+	}
+}
+
+func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID := chiURLParam(r, "orgID")
+	if herr := s.requireOrgRole(r.Context(), uid, orgID, "member"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
+	svcs, err := s.Store.ListServicesByOrg(r.Context(), orgID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	out := make([]serviceResp, 0, len(svcs))
+	for _, sv := range svcs {
+		out = append(out, toServiceResp(sv))
+	}
+	writeJSON(w, 200, out)
+}
+
+type createServiceReq struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Version    string `json:"version"`
+	LocationID string `json:"location_id"`
+	NodeID     string `json:"node_id"`
+}
+
+func genPassword() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	orgID := chiURLParam(r, "orgID")
+	if herr := s.requireOrgRole(r.Context(), uid, orgID, "admin"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
+	var req createServiceReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]any{"error": "invalid json"})
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	kind := strings.TrimSpace(strings.ToLower(req.Kind))
+	if name == "" || !supportedKinds[kind] {
+		writeJSON(w, 400, map[string]any{"error": "name and valid kind required"})
+		return
+	}
+	version := strings.TrimSpace(req.Version)
+	if version == "" {
+		version = defaultVersionForKind(kind)
+	}
+
+	// Pick a node if not supplied: any online node, preferring the requested location.
+	nodes, err := s.Store.ListNodesByOrg(r.Context(), orgID)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	var chosen *db.Node
+	for _, n := range nodes {
+		if strings.TrimSpace(req.NodeID) != "" {
+			if n.ID == req.NodeID {
+				tmp := n
+				chosen = &tmp
+				break
+			}
+			continue
+		}
+		if strings.TrimSpace(req.LocationID) != "" && n.LocationID.String != req.LocationID {
+			continue
+		}
+		if n.Status != "online" {
+			continue
+		}
+		tmp := n
+		chosen = &tmp
+		break
+	}
+	// Fall back to any online node if none matched; fall back to the primary.
+	if chosen == nil {
+		for _, n := range nodes {
+			if n.Status == "online" {
+				tmp := n
+				chosen = &tmp
+				break
+			}
+		}
+	}
+	if chosen == nil {
+		for _, n := range nodes {
+			if n.Role == "primary" {
+				tmp := n
+				chosen = &tmp
+				break
+			}
+		}
+	}
+
+	pw, err := genPassword()
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	pwEnc, err := envcrypt.Encrypt(s.Cfg.EncryptKey, []byte(pw))
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+
+	username := "opencel"
+	dbName := ""
+	if kind == "postgres" || kind == "mysql" || kind == "mongodb" {
+		dbName = "opencel"
+	}
+
+	params := db.CreateServiceParams{
+		OrgID:        orgID,
+		LocationID:   strings.TrimSpace(req.LocationID),
+		Name:         name,
+		Kind:         kind,
+		Version:      version,
+		Username:     username,
+		DatabaseName: dbName,
+		PasswordEnc:  pwEnc,
+	}
+	if chosen != nil {
+		params.NodeID = chosen.ID
+		if params.LocationID == "" {
+			params.LocationID = chosen.LocationID.String
+		}
+	}
+	sv, err := s.Store.CreateService(r.Context(), params)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	// Kick off provisioning asynchronously; best-effort. If no node available, surface as failed.
+	if chosen == nil {
+		_ = s.Store.UpdateServiceStatus(r.Context(), sv.ID, "failed", "no node available to provision on")
+	} else {
+		go s.provisionService(sv.ID)
+	}
+	writeJSON(w, 201, toServiceResp(*sv))
+}
+
+func (s *Server) handleGetService(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	id := chiURLParam(r, "id")
+	sv, err := s.Store.GetService(r.Context(), id)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if sv == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if herr := s.requireOrgRole(r.Context(), uid, sv.OrgID, "member"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
+	writeJSON(w, 200, toServiceResp(*sv))
+}
+
+func (s *Server) handleGetServiceConnection(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	id := chiURLParam(r, "id")
+	sv, err := s.Store.GetService(r.Context(), id)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if sv == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if herr := s.requireOrgRole(r.Context(), uid, sv.OrgID, "admin"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
+	pw := ""
+	if len(sv.PasswordEnc) > 0 {
+		if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, sv.PasswordEnc); err == nil {
+			pw = string(v)
+		}
+	}
+	host := sv.InternalHost.String
+	port := int(sv.InternalPort.Int64)
+	if host == "" || port == 0 {
+		writeJSON(w, 200, map[string]any{
+			"status":   sv.Status,
+			"kind":     sv.Kind,
+			"password": pw,
+			"username": sv.Username.String,
+			"database": sv.DatabaseName.String,
+		})
+		return
+	}
+	var uri string
+	switch sv.Kind {
+	case "postgres":
+		uri = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", sv.Username.String, pw, host, port, sv.DatabaseName.String)
+	case "redis":
+		uri = fmt.Sprintf("redis://:%s@%s:%d/0", pw, host, port)
+	case "mysql":
+		uri = fmt.Sprintf("mysql://%s:%s@%s:%d/%s", sv.Username.String, pw, host, port, sv.DatabaseName.String)
+	case "mongodb":
+		uri = fmt.Sprintf("mongodb://%s:%s@%s:%d/%s", sv.Username.String, pw, host, port, sv.DatabaseName.String)
+	}
+	writeJSON(w, 200, map[string]any{
+		"status":   sv.Status,
+		"kind":     sv.Kind,
+		"host":     host,
+		"port":     port,
+		"username": sv.Username.String,
+		"password": pw,
+		"database": sv.DatabaseName.String,
+		"uri":      uri,
+	})
+}
+
+func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFromCtx(r.Context())
+	id := chiURLParam(r, "id")
+	sv, err := s.Store.GetService(r.Context(), id)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
+	if sv == nil {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if herr := s.requireOrgRole(r.Context(), uid, sv.OrgID, "admin"); herr != nil {
+		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
+		return
+	}
+	// Mark deleting and destroy the container (best-effort).
+	_ = s.Store.UpdateServiceStatus(r.Context(), id, "deleting", "")
+	go func() {
+		_ = removeServiceContainer(sv.ContainerName.String)
+		_ = s.Store.DeleteService(r.Context(), id)
+	}()
+	writeJSON(w, 200, map[string]any{"ok": true})
+}

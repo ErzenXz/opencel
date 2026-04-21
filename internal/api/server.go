@@ -76,6 +76,9 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 		r.Get("/auth/github/start", s.handleGitHubOAuthStart)
 		r.Get("/auth/github/callback", s.handleGitHubOAuthCallback)
 
+		// Node agent registration/heartbeat uses a bearer token, not a session cookie.
+		r.Post("/nodes/register", s.handleNodeRegister)
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 			r.Get("/me", s.handleMe)
@@ -117,6 +120,22 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 			r.Get("/deployments/{id}", s.handleGetDeployment)
 			r.Post("/deployments/{id}/promote", s.handlePromoteDeployment)
 			r.Get("/deployments/{id}/logs", s.handleDeploymentLogsSSE)
+
+			// Locations, nodes, services (managed DBs).
+			r.Get("/orgs/{orgID}/locations", s.handleListLocations)
+			r.Post("/orgs/{orgID}/locations", s.handleCreateLocation)
+			r.Get("/locations/{id}", s.handleGetLocation)
+			r.Delete("/locations/{id}", s.handleDeleteLocation)
+
+			r.Get("/orgs/{orgID}/nodes", s.handleListNodes)
+			r.Post("/orgs/{orgID}/nodes", s.handleCreateNode)
+			r.Delete("/nodes/{id}", s.handleDeleteNode)
+
+			r.Get("/orgs/{orgID}/services", s.handleListServices)
+			r.Post("/orgs/{orgID}/services", s.handleCreateService)
+			r.Get("/services/{id}", s.handleGetService)
+			r.Get("/services/{id}/connection", s.handleGetServiceConnection)
+			r.Delete("/services/{id}", s.handleDeleteService)
 		})
 
 		// GitHub webhooks do not require auth cookie, but must verify signature.

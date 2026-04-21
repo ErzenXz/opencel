@@ -17,6 +17,7 @@ import { apiFetch } from "@/lib/api";
 import { getStoredOrgID } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ActivityFeed } from "@/components/activity-feed";
+import { OpencelLogo } from "@/components/opencel-logo";
 
 type Project = {
   id: string;
@@ -265,14 +266,7 @@ export default function DashboardPage() {
                     className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-[#111]"
                   >
                     <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#333] bg-[#111]">
-                      <svg
-                        height="10"
-                        viewBox="0 0 76 65"
-                        className="text-[#555]"
-                        fill="currentColor"
-                      >
-                        <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-                      </svg>
+                      <OpencelLogo size={12} className="text-[#666]" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-white">{p.slug}</p>

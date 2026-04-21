@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { OpencelLogo } from "@/components/opencel-logo";
 import {
   PROJECT_TEMPLATES,
   getProjectTemplate,
@@ -478,15 +479,8 @@ export default function ProjectsPage() {
                 className="group relative rounded-lg border border-[#333] bg-[#0a0a0a] transition-colors hover:border-[#555] hover:bg-[#111]"
               >
                 {/* Preview */}
-                <div className="relative flex h-[120px] items-center justify-center rounded-t-lg border-b border-[#222] bg-gradient-to-br from-[#111] to-[#0a0a0a]">
-                  <svg
-                    height="20"
-                    viewBox="0 0 76 65"
-                    className="text-[#333] transition-colors group-hover:text-[#555]"
-                    fill="currentColor"
-                  >
-                    <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-                  </svg>
+                <div className="relative flex h-[120px] items-center justify-center rounded-t-lg border-b border-[#1f1f1f] bg-[#0d0d0d]">
+                  <OpencelLogo size={22} className="text-[#3a3a3a] transition-colors group-hover:text-[#555]" />
                   {/* Favorite button */}
                   <button
                     onClick={(e) => onToggleFavorite(e, p.id)}
@@ -573,14 +567,7 @@ export default function ProjectsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-md border border-[#333] bg-[#111]">
-                      <svg
-                        height="12"
-                        viewBox="0 0 76 65"
-                        className="text-[#555]"
-                        fill="currentColor"
-                      >
-                        <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-                      </svg>
+                      <OpencelLogo size={14} className="text-[#666]" />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 text-sm font-medium text-white">
