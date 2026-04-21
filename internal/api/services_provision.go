@@ -234,7 +234,16 @@ func removeServiceContainer(name string) error {
 	if name == "" {
 		return nil
 	}
-	_ = exec.Command("docker", "rm", "-f", name).Run()
+	out, err := exec.Command("docker", "rm", "-f", name).CombinedOutput()
+	if err != nil {
+		// A missing container isn't a real failure — the caller wants the
+		// container *gone*, and it already is. Only bail on other errors.
+		msg := strings.ToLower(string(out))
+		if strings.Contains(msg, "no such container") {
+			return nil
+		}
+		return fmt.Errorf("docker rm %s: %w: %s", name, err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 
