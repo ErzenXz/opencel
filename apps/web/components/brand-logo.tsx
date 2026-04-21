@@ -1,3 +1,7 @@
+"use client";
+
+import { useId } from "react";
+
 import { cn } from "@/lib/utils";
 
 type BrandLogoProps = {
@@ -21,7 +25,10 @@ export function BrandLogo({
   variant = "mark",
   className,
 }: BrandLogoProps) {
-  const gradId = "opencel-brand-gradient";
+  const reactId = useId();
+  // Sanitize React's generated id so it is safe to use inside an SVG `url(#...)`
+  // reference (React's default delimiters `:` break url() references in Safari).
+  const gradId = `opencel-brand-grad-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <span
       className={cn("inline-flex items-center gap-2 text-foreground", className)}
@@ -34,7 +41,14 @@ export function BrandLogo({
         aria-hidden="true"
       >
         <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+          <linearGradient
+            id={gradId}
+            x1="0"
+            y1="0"
+            x2="32"
+            y2="32"
+            gradientUnits="userSpaceOnUse"
+          >
             <stop offset="0%" stopColor="hsl(var(--brand-from))" />
             <stop offset="100%" stopColor="hsl(var(--brand-to))" />
           </linearGradient>

@@ -441,7 +441,7 @@ export default function ProjectsPage() {
         <div className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-[#2a2a2a] bg-[#080808] py-20 text-center">
           <div className="pointer-events-none absolute inset-0 bg-hero-radial opacity-60" />
           <div className="relative">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#0c0c0c] shadow-brand/20">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#0c0c0c] shadow-brand">
               <BrandLogo size={22} />
             </div>
             <p className="text-sm text-[#c5c5c5]">
