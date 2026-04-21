@@ -302,9 +302,16 @@ func (s *Server) handleGetServiceConnection(w http.ResponseWriter, r *http.Reque
 	}
 	pw := ""
 	if len(sv.PasswordEnc) > 0 {
-		if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, sv.PasswordEnc); err == nil {
-			pw = string(v)
+		v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, sv.PasswordEnc)
+		if err != nil {
+			// Silently returning an empty password would hand the caller a
+			// URI like `postgres://opencel:@host:port/db` that connects to
+			// nothing — fail loud so they know the encrypt key was rotated
+			// (or the blob is corrupt) instead of chasing a mystery 401.
+			writeJSON(w, 500, map[string]any{"error": "failed to decrypt service password: " + err.Error()})
+			return
 		}
+		pw = string(v)
 	}
 	host := sv.InternalHost.String
 	port := int(sv.InternalPort.Int64)
@@ -387,6 +394,12 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 						} else {
 							remErr = fmt.Errorf("decrypt agent token: %w", derr)
 						}
+					}
+					if remErr == nil && agentToken == "" {
+						// Without a token the agent would 401; sending the
+						// request just masks the orphan behind a confusing
+						// 401 in the stored error message.
+						remErr = fmt.Errorf("missing agent token for node %s; re-create the node", n.ID)
 					}
 					if remErr == nil {
 						remErr = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, containerName)
