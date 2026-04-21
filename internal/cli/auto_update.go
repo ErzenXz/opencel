@@ -67,7 +67,12 @@ func newAutoUpdateEnableCmd() *cobra.Command {
 			if withSelf {
 				execArgs = append(execArgs, "--self")
 			}
-			execLine := fmt.Sprintf("%s %s", binPath, strings.Join(execArgs, " "))
+			parts := make([]string, 0, len(execArgs)+1)
+			parts = append(parts, quoteForSystemd(binPath))
+			for _, a := range execArgs {
+				parts = append(parts, quoteForSystemd(a))
+			}
+			execLine := strings.Join(parts, " ")
 
 			service := "" +
 				"[Unit]\n" +
@@ -175,6 +180,17 @@ func newAutoUpdateStatusCmd() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// quoteForSystemd quotes a token for use inside a systemd ExecStart= line.
+// Systemd splits on whitespace, so any argument containing whitespace or
+// special characters must be wrapped in double quotes with \ and " escaped.
+func quoteForSystemd(s string) string {
+	if !strings.ContainsAny(s, " \t\"\\\n") {
+		return s
+	}
+	replaced := strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`)
+	return `"` + replaced + `"`
 }
 
 func resolveOpenCelBinary() (string, error) {
