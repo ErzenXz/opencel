@@ -237,3 +237,30 @@ func removeServiceContainer(name string) error {
 	_ = exec.Command("docker", "rm", "-f", name).Run()
 	return nil
 }
+
+// removeServiceContainerRemote asks a worker node's agent to remove a
+// container. Mirrors runRemoteProvision's auth: the Bearer token is the
+// node's registration token.
+func removeServiceContainerRemote(ctx context.Context, agentURL, agentToken, container string) error {
+	if strings.TrimSpace(container) == "" || strings.TrimSpace(agentURL) == "" {
+		return nil
+	}
+	body, _ := json.Marshal(map[string]string{"container_name": container})
+	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(agentURL, "/")+"/agent/services/remove", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if agentToken != "" {
+		req.Header.Set("Authorization", "Bearer "+agentToken)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("agent remove failed: %d", resp.StatusCode)
+	}
+	return nil
+}

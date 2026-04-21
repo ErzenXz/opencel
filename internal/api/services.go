@@ -348,10 +348,33 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 	// an independent context so it survives the handler returning.
 	_ = s.Store.UpdateServiceStatus(r.Context(), id, "deleting", "")
 	containerName := sv.ContainerName.String
+	nodeID := sv.NodeID.String
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		_ = removeServiceContainer(containerName)
+		// Removal has to follow where the container actually lives: local
+		// docker for the primary, a signed HTTP call to the agent for
+		// workers. Otherwise the DB row vanishes but the container keeps
+		// running on the worker forever.
+		if nodeID != "" {
+			if n, err := s.Store.GetNode(ctx, nodeID); err == nil && n != nil {
+				if n.Role != "primary" && n.AgentURL.String != "" {
+					var agentToken string
+					if len(n.TokenEnc) > 0 {
+						if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); err == nil {
+							agentToken = string(v)
+						}
+					}
+					_ = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, containerName)
+				} else {
+					_ = removeServiceContainer(containerName)
+				}
+			} else {
+				_ = removeServiceContainer(containerName)
+			}
+		} else {
+			_ = removeServiceContainer(containerName)
+		}
 		_ = s.Store.DeleteService(ctx, id)
 	}()
 	writeJSON(w, 200, map[string]any{"ok": true})

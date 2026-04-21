@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 
 CREATE INDEX IF NOT EXISTS idx_nodes_org ON nodes(org_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(location_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_token_hash ON nodes(token_hash);
 
 CREATE TABLE IF NOT EXISTS services (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

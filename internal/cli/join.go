@@ -203,17 +203,20 @@ type provisionSpecOut struct {
 func runAgent(ctx context.Context, cfg *nodeConfig) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+	// Require the node's registration token. Without this the agent is an
+	// unauthenticated `docker run` executor for anyone who can reach the
+	// listen port.
+	checkBearer := func(r *http.Request) bool {
+		authz := r.Header.Get("Authorization")
+		const pfx = "Bearer "
+		return strings.HasPrefix(authz, pfx) && subtleCompare(strings.TrimPrefix(authz, pfx), cfg.Token) == 1
+	}
 	mux.HandleFunc("/agent/services", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "method", 405)
 			return
 		}
-		// Require the node's registration token. Without this the agent is an
-		// unauthenticated `docker run` executor for anyone who can reach the
-		// listen port.
-		authz := r.Header.Get("Authorization")
-		const pfx = "Bearer "
-		if !strings.HasPrefix(authz, pfx) || subtleCompare(strings.TrimPrefix(authz, pfx), cfg.Token) != 1 {
+		if !checkBearer(r) {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
@@ -229,6 +232,37 @@ func runAgent(ctx context.Context, cfg *nodeConfig) error {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("/agent/services/remove", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "method", 405)
+			return
+		}
+		if !checkBearer(r) {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		var in struct {
+			ContainerName string `json:"container_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, "bad json", 400)
+			return
+		}
+		name := strings.TrimSpace(in.ContainerName)
+		if name == "" {
+			http.Error(w, "container_name required", 400)
+			return
+		}
+		// Belt-and-braces: only touch containers this agent would have
+		// created, so a compromised/confused control plane can't ask the
+		// agent to `docker rm` arbitrary containers on the host.
+		if !strings.HasPrefix(name, "opencel-svc-") {
+			http.Error(w, "refusing to remove non-opencel container", 400)
+			return
+		}
+		_ = exec.CommandContext(r.Context(), "docker", "rm", "-f", name).Run()
+		w.WriteHeader(204)
 	})
 
 	srv := &http.Server{Addr: cfg.Listen, Handler: mux}
