@@ -96,8 +96,13 @@ func (s *Server) provisionService(serviceID string) {
 	// created instead of stamping it 'running'. Otherwise the delete
 	// handler's captured container_name would be empty and the container
 	// would outlive its DB record on this node.
+	//
+	// A transient DB error here is NOT evidence of a delete; treat it
+	// optimistically — UpdateServiceRunning will either succeed or also
+	// fail, but we must not destroy a freshly created container because
+	// of a blip on the control plane's DB connection.
 	cur, cerr := s.Store.GetService(ctx, sv.ID)
-	if cerr != nil || cur == nil || cur.Status == "deleting" {
+	if cerr == nil && (cur == nil || cur.Status == "deleting") {
 		if n.Role != "primary" && n.AgentURL.String != "" {
 			var agentToken string
 			if len(n.TokenEnc) > 0 {
