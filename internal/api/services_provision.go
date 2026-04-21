@@ -111,16 +111,35 @@ func (s *Server) provisionService(serviceID string) {
 	// of a blip on the control plane's DB connection.
 	cur, cerr := s.Store.GetService(ctx, sv.ID)
 	if cerr == nil && (cur == nil || cur.Status == "deleting") {
+		var rmErr error
 		if n.Role != "primary" && n.AgentURL.String != "" {
 			var agentToken string
 			if len(n.TokenEnc) > 0 {
 				if v, derr := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); derr == nil {
 					agentToken = string(v)
+				} else {
+					rmErr = fmt.Errorf("decrypt agent token: %w", derr)
 				}
 			}
-			_ = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, info.ContainerName)
+			if rmErr == nil && agentToken == "" {
+				// Without a token the agent would 401; sending the
+				// request would just mask the orphan with a discarded
+				// error.
+				rmErr = fmt.Errorf("missing agent token; cannot remove container %s on %s", info.ContainerName, n.AgentURL.String)
+			}
+			if rmErr == nil {
+				rmErr = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, info.ContainerName)
+			}
 		} else {
-			_ = removeServiceContainer(info.ContainerName)
+			rmErr = removeServiceContainer(info.ContainerName)
+		}
+		if rmErr != nil {
+			// Couldn't clean up the container we just created. Keep the
+			// row around (status=failed with a clear message) so the
+			// admin can retry or intervene manually; deleting here
+			// would orphan the container.
+			_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "rollback after concurrent delete failed: "+rmErr.Error())
+			return
 		}
 		if cur != nil {
 			_ = s.Store.DeleteService(ctx, sv.ID)

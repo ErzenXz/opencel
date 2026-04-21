@@ -357,9 +357,16 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
 		return
 	}
-	// Mark deleting and destroy the container (best-effort). The goroutine uses
-	// an independent context so it survives the handler returning.
-	_ = s.Store.UpdateServiceStatus(r.Context(), id, "deleting", "")
+	// Flip to 'deleting' BEFORE launching the async removal so a concurrent
+	// provisionService goroutine sees it on its post-creation recheck and
+	// unwinds the freshly created container instead of stamping it running.
+	// If this update fails (e.g. client disconnect cancels r.Context(), or
+	// a transient DB error), we can't rely on that race-protection — don't
+	// kick off the goroutine; the caller can retry the DELETE.
+	if err := s.Store.UpdateServiceStatus(r.Context(), id, "deleting", ""); err != nil {
+		writeJSON(w, 500, map[string]any{"error": "failed to mark service for deletion: " + err.Error()})
+		return
+	}
 	containerName := sv.ContainerName.String
 	nodeID := sv.NodeID.String
 	go func() {
