@@ -70,8 +70,16 @@ func (s *Server) provisionService(serviceID string) {
 
 	var info db.ServiceRunningInfo
 	var provErr error
-	if n.Role == "primary" || n.AgentURL.String == "" {
+	if n.Role == "primary" {
 		info, provErr = runLocalProvision(ctx, spec)
+	} else if n.AgentURL.String == "" {
+		// A worker that hasn't registered yet has no agent URL. Don't
+		// silently fall back to local docker — that would land the
+		// container on the control plane while the DB says it's on the
+		// worker, and a later delete would try to remove it from the
+		// (now-registered) worker and leak the one on the primary.
+		_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "worker node has not registered yet; wait for it to come online")
+		return
 	} else {
 		// Decrypt the node's registration token so we can authenticate to its agent.
 		var agentToken string
