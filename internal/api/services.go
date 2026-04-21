@@ -149,6 +149,19 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) {
 	if version == "" {
 		version = defaultVersionForKind(kind)
 	}
+	// Location, if supplied, must belong to the requesting org. Otherwise an
+	// admin in org A could attach a service to a location owned by org B.
+	if strings.TrimSpace(req.LocationID) != "" {
+		l, err := s.Store.GetLocation(r.Context(), req.LocationID)
+		if err != nil {
+			writeJSON(w, 500, map[string]any{"error": err.Error()})
+			return
+		}
+		if l == nil || l.OrgID != orgID {
+			writeJSON(w, 400, map[string]any{"error": "invalid location"})
+			return
+		}
+	}
 
 	// Pick a node if not supplied: any online node, preferring the requested location.
 	nodes, err := s.Store.ListNodesByOrg(r.Context(), orgID)
