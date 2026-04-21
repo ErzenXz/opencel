@@ -38,6 +38,7 @@ import { FeedbackWidget } from "@/components/feedback-widget";
 import { SystemStatusBanner } from "@/components/system-status";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts";
 import { NotificationBell } from "@/components/notification-bell";
+import { BrandLogo } from "@/components/brand-logo";
 
 export type Me = { id: string; email: string; is_instance_admin?: boolean };
 export type Org = { id: string; slug: string; name: string; role: string };
@@ -58,14 +59,6 @@ export function setStoredOrgID(id: string) {
   } catch {
     // ignore
   }
-}
-
-function VercelLogo() {
-  return (
-    <svg height="22" viewBox="0 0 76 65" fill="currentColor">
-      <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-    </svg>
-  );
 }
 
 export function AppShell({
@@ -129,9 +122,9 @@ export function AppShell({
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-hero-radial">
         <div className="flex items-center gap-3">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#333] border-t-white" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#333] border-t-brand" />
           <span className="text-sm text-[#888]">Loading...</span>
         </div>
       </main>
@@ -167,14 +160,17 @@ export function AppShell({
       <KeyboardShortcutsDialog />
 
       {/* ─── Top Navigation Bar ─── */}
-      <header className="sticky top-0 z-50 border-b border-[#333] bg-black/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1200px] items-center gap-4 px-6">
+      <header className="sticky top-0 z-50 border-b border-[#222] bg-black/70 backdrop-blur-xl">
+        {/* Hairline gradient under the header */}
+        <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-brand/60 to-transparent opacity-60" />
+        <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-4 px-6">
           {/* Logo */}
           <Link
             href="/dashboard"
-            className="flex shrink-0 items-center text-white transition-opacity hover:opacity-80"
+            aria-label="OpenCel home"
+            className="flex shrink-0 items-center gap-2 text-white transition-opacity hover:opacity-90"
           >
-            <VercelLogo />
+            <BrandLogo variant="full" size={22} />
           </Link>
 
           {/* Separator */}
@@ -249,12 +245,12 @@ export function AppShell({
                   href={n.href}
                   className={cn(
                     "relative flex h-full items-center px-3 text-[13px] transition-colors",
-                    active ? "text-white" : "text-[#888] hover:text-[#ededed]"
+                    active ? "text-white" : "text-[#888] hover:text-[#ededed]",
                   )}
                 >
                   {n.label}
                   {active && (
-                    <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-white" />
+                    <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-brand-gradient" />
                   )}
                 </Link>
               );
@@ -300,7 +296,7 @@ export function AppShell({
             {/* User Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-xs font-bold text-white ring-1 ring-[#333] transition-all hover:ring-[#555]">
+                <button className="bg-brand-gradient flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white ring-1 ring-[#333] transition-all hover:ring-brand/60">
                   {me.email.slice(0, 1).toUpperCase()}
                 </button>
               </DropdownMenuTrigger>
@@ -375,7 +371,7 @@ export function AppShell({
       </header>
 
       {/* ─── Content ─── */}
-      <main className="mx-auto w-full max-w-[1200px] px-6 py-8">
+      <main className="mx-auto w-full max-w-[1400px] px-6 py-8 animate-fade-in">
         {children}
       </main>
 

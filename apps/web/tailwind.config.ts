@@ -51,6 +51,13 @@ const config: Config = {
           foreground: "hsl(var(--destructive-foreground))",
         },
         "destructive-foreground": "hsl(var(--destructive-foreground))",
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))",
+          from: "hsl(var(--brand-from))",
+          to: "hsl(var(--brand-to))",
+          soft: "hsl(var(--brand-soft))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -61,6 +68,15 @@ const config: Config = {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+      },
+      keyframes: {
+        "fade-in": {
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "fade-in": "fade-in 280ms ease-out both",
       },
     },
   },
