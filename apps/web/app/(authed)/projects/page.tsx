@@ -17,7 +17,6 @@ import { apiFetch } from "@/lib/api";
 import { getStoredOrgID } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BrandLogo } from "@/components/brand-logo";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { OpencelLogo } from "@/components/opencel-logo";
 import {
   PROJECT_TEMPLATES,
   getProjectTemplate,
@@ -297,9 +297,9 @@ export default function ProjectsPage() {
           </Button>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button variant="brand" className="h-10 gap-2">
+              <Button className="h-10 gap-2">
                 <Plus className="h-4 w-4" />
-                Add new
+                Add New...
               </Button>
             </DialogTrigger>
             <DialogContent className="border-[#333] bg-[#0a0a0a] sm:max-w-lg">
@@ -438,40 +438,33 @@ export default function ProjectsPage() {
           )}
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-[#2a2a2a] bg-[#080808] py-20 text-center">
-          <div className="pointer-events-none absolute inset-0 bg-hero-radial opacity-60" />
-          <div className="relative">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#0c0c0c] shadow-brand">
-              <BrandLogo size={22} />
-            </div>
-            <p className="text-sm text-[#c5c5c5]">
-              {query ? "No projects match your search." : "No projects yet."}
-            </p>
-            <p className="mt-1 max-w-[360px] text-xs text-[#777]">
-              {query
-                ? "Try a different search term."
-                : "Import a Git repository or create a new project to start shipping."}
-            </p>
-            {!query && (
-              <div className="mt-5 flex justify-center gap-2">
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="border-[#2a2a2a] bg-transparent text-[#ededed] hover:bg-[#111]"
-                >
-                  <Link href="/import">Import Project</Link>
-                </Button>
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  Add new project
-                </Button>
-              </div>
-            )}
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#333] py-20 text-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-[#333] bg-[#111]">
+            <GitBranch className="h-5 w-5 text-[#666]" />
           </div>
+          <p className="text-sm text-[#888]">
+            {query ? "No projects match your search." : "No projects yet."}
+          </p>
+          <p className="mt-1 text-xs text-[#555]">
+            {query
+              ? "Try a different search term."
+              : "Import a Git repository or create a new project to get started."}
+          </p>
+          {!query && (
+            <div className="mt-4 flex gap-2">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="border-[#333] bg-transparent text-[#ededed] hover:bg-[#111]"
+              >
+                <Link href="/import">Import Project</Link>
+              </Button>
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                Add New Project
+              </Button>
+            </div>
+          )}
         </div>
       ) : viewMode === "grid" ? (
         /* ─── Grid View ─── */
@@ -483,14 +476,11 @@ export default function ProjectsPage() {
               <Link
                 key={p.id}
                 href={`/projects/${p.id}`}
-                className="group relative rounded-xl border border-[#222] bg-[#0a0a0a] transition-all hover:-translate-y-[1px] hover:border-brand/40 hover:bg-[#0d0d0d]"
+                className="group relative rounded-lg border border-[#333] bg-[#0a0a0a] transition-colors hover:border-[#555] hover:bg-[#111]"
               >
                 {/* Preview */}
-                <div className="relative flex h-[120px] items-center justify-center overflow-hidden rounded-t-xl border-b border-[#1a1a1a] bg-gradient-to-br from-[#111] to-[#0a0a0a]">
-                  <div className="pointer-events-none absolute inset-0 bg-hero-radial opacity-0 transition-opacity duration-300 group-hover:opacity-60" />
-                  <div className="relative opacity-70 transition-opacity group-hover:opacity-100">
-                    <BrandLogo size={26} />
-                  </div>
+                <div className="relative flex h-[120px] items-center justify-center rounded-t-lg border-b border-[#1f1f1f] bg-[#0d0d0d]">
+                  <OpencelLogo size={22} className="text-[#3a3a3a] transition-colors group-hover:text-[#555]" />
                   {/* Favorite button */}
                   <button
                     onClick={(e) => onToggleFavorite(e, p.id)}
@@ -576,8 +566,8 @@ export default function ProjectsPage() {
                   className="group grid items-center gap-3 px-4 py-3 transition-colors hover:bg-[#0a0a0a] md:grid-cols-[1fr_1fr_120px_120px_40px]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-md border border-[#222] bg-[#111]">
-                      <BrandLogo size={16} />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-md border border-[#333] bg-[#111]">
+                      <OpencelLogo size={14} className="text-[#666]" />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 text-sm font-medium text-white">

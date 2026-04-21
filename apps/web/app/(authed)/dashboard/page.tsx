@@ -17,7 +17,7 @@ import { apiFetch } from "@/lib/api";
 import { getStoredOrgID } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { ActivityFeed } from "@/components/activity-feed";
-import { BrandLogo } from "@/components/brand-logo";
+import { OpencelLogo } from "@/components/opencel-logo";
 
 type Project = {
   id: string;
@@ -115,7 +115,7 @@ export default function DashboardPage() {
               Import
             </Link>
           </Button>
-          <Button asChild variant="brand" className="gap-2">
+          <Button asChild className="gap-2">
             <Link href="/projects">
               <Plus className="h-3.5 w-3.5" />
               New Project
@@ -125,7 +125,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-px overflow-hidden rounded-xl border border-[#222] bg-[#222] sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-px overflow-hidden rounded-lg border border-[#333] bg-[#333] sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             label: "Total Projects",
@@ -150,16 +150,12 @@ export default function DashboardPage() {
             pulse: stats.activeDeployments > 0,
           },
         ].map((stat) => (
-          <div
-            key={stat.label}
-            className="group relative overflow-hidden bg-[#0a0a0a] p-5 transition-colors hover:bg-[#0c0c0c]"
-          >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+          <div key={stat.label} className="bg-[#0a0a0a] p-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-[#777]">
+              <span className="text-xs font-medium uppercase tracking-wider text-[#666]">
                 {stat.label}
               </span>
-              <stat.icon className="h-4 w-4 text-[#555] transition-colors group-hover:text-brand" />
+              <stat.icon className="h-4 w-4 text-[#444]" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               {loading ? (
@@ -179,7 +175,7 @@ export default function DashboardPage() {
             {stat.href && (
               <Link
                 href={stat.href}
-                className="mt-2 inline-flex items-center gap-1 text-xs text-brand hover:underline"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-[#0070f3] hover:underline"
               >
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
@@ -202,7 +198,7 @@ export default function DashboardPage() {
               View all
             </Link>
           </div>
-          <div className="rounded-xl border border-[#222] bg-[#0a0a0a] p-3">
+          <div className="rounded-lg border border-[#333] bg-[#0a0a0a] p-3">
             <ActivityFeed limit={8} />
           </div>
         </div>
@@ -240,10 +236,10 @@ export default function DashboardPage() {
               <Link
                 key={action.href}
                 href={action.href}
-                className="group flex items-center gap-3 rounded-xl border border-[#222] bg-[#0a0a0a] p-4 transition-colors hover:border-brand/40 hover:bg-[#111]"
+                className="group flex items-center gap-3 rounded-lg border border-[#333] bg-[#0a0a0a] p-4 transition-colors hover:border-[#555] hover:bg-[#111]"
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#111] transition-colors group-hover:bg-[#1a1a1a] group-hover:text-brand">
-                  <action.icon className="h-4 w-4 text-[#888] transition-colors group-hover:text-brand" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#111] transition-colors group-hover:bg-[#1a1a1a]">
+                  <action.icon className="h-4 w-4 text-[#888]" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-white">
@@ -269,8 +265,8 @@ export default function DashboardPage() {
                     href={`/projects/${p.id}`}
                     className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-[#111]"
                   >
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#222] bg-[#111]">
-                      <BrandLogo size={14} />
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#333] bg-[#111]">
+                      <OpencelLogo size={12} className="text-[#666]" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-white">{p.slug}</p>

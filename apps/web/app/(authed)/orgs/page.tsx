@@ -227,7 +227,7 @@ export default function OrgsPage() {
                   window.location.reload();
                 }}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#333] to-[#555] text-sm font-bold uppercase text-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md border border-[#333] bg-[#111] text-sm font-semibold uppercase text-white">
                   {o.name.charAt(0)}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -320,7 +320,7 @@ export default function OrgsPage() {
                     className="flex items-center justify-between gap-4 px-4 py-3 md:grid md:grid-cols-[1fr_100px_100px]"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-xs font-bold text-white">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#333] bg-[#111] text-xs font-semibold text-white">
                         {m.email.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">

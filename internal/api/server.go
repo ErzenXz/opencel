@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -13,6 +16,15 @@ import (
 	"github.com/opencel/opencel/internal/integrations"
 	"github.com/opencel/opencel/internal/settings"
 )
+
+// How long a node can go without a heartbeat before we flip it to 'offline'.
+// The agent heartbeats every 30s, so 2m gives us ~4 missed beats of slack
+// before the scheduler stops considering the node.
+const nodeHeartbeatStaleThreshold = 2 * time.Minute
+
+// How often we sweep for stale nodes. Shorter than the stale threshold so
+// a just-died node is reflected in the UI within one tick.
+const nodeHeartbeatSweepInterval = 30 * time.Second
 
 type Server struct {
 	Cfg        *config.Config
@@ -76,6 +88,9 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 		r.Get("/auth/github/start", s.handleGitHubOAuthStart)
 		r.Get("/auth/github/callback", s.handleGitHubOAuthCallback)
 
+		// Node agent registration/heartbeat uses a bearer token, not a session cookie.
+		r.Post("/nodes/register", s.handleNodeRegister)
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 			r.Get("/me", s.handleMe)
@@ -117,6 +132,22 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 			r.Get("/deployments/{id}", s.handleGetDeployment)
 			r.Post("/deployments/{id}/promote", s.handlePromoteDeployment)
 			r.Get("/deployments/{id}/logs", s.handleDeploymentLogsSSE)
+
+			// Locations, nodes, services (managed DBs).
+			r.Get("/orgs/{orgID}/locations", s.handleListLocations)
+			r.Post("/orgs/{orgID}/locations", s.handleCreateLocation)
+			r.Get("/locations/{id}", s.handleGetLocation)
+			r.Delete("/locations/{id}", s.handleDeleteLocation)
+
+			r.Get("/orgs/{orgID}/nodes", s.handleListNodes)
+			r.Post("/orgs/{orgID}/nodes", s.handleCreateNode)
+			r.Delete("/nodes/{id}", s.handleDeleteNode)
+
+			r.Get("/orgs/{orgID}/services", s.handleListServices)
+			r.Post("/orgs/{orgID}/services", s.handleCreateService)
+			r.Get("/services/{id}", s.handleGetService)
+			r.Get("/services/{id}/connection", s.handleGetServiceConnection)
+			r.Delete("/services/{id}", s.handleDeleteService)
 		})
 
 		// GitHub webhooks do not require auth cookie, but must verify signature.
@@ -124,5 +155,24 @@ func NewServer(cfg *config.Config, store *db.Store) (*Server, error) {
 	})
 
 	s.Router = r
+	s.startNodeReaper()
 	return s, nil
+}
+
+// startNodeReaper periodically flips nodes whose agents have stopped
+// heartbeating to 'offline'. Without this, handleCreateService would keep
+// auto-picking dead nodes (it filters on status == 'online') and the UI
+// status badges would never change after a node went down.
+func (s *Server) startNodeReaper() {
+	go func() {
+		t := time.NewTicker(nodeHeartbeatSweepInterval)
+		defer t.Stop()
+		for range t.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := s.Store.MarkStaleNodesOffline(ctx, nodeHeartbeatStaleThreshold); err != nil {
+				log.Printf("node reaper: mark stale nodes offline: %v", err)
+			}
+			cancel()
+		}
+	}()
 }

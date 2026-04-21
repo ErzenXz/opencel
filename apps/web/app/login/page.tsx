@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BrandLogo } from "@/components/brand-logo";
+import { OpencelLogo } from "@/components/opencel-logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,9 +21,7 @@ export default function LoginPage() {
   useEffect(() => {
     (async () => {
       try {
-        const st = (await apiFetch("/api/setup/status")) as {
-          needs_setup: boolean;
-        };
+        const st = (await apiFetch("/api/setup/status")) as { needs_setup: boolean };
         if (st.needs_setup) {
           router.replace("/setup");
           return;
@@ -38,9 +36,7 @@ export default function LoginPage() {
         // ignore
       }
       try {
-        const st = (await apiFetch("/api/auth/github/status")) as {
-          configured: boolean;
-        };
+        const st = (await apiFetch("/api/auth/github/status")) as { configured: boolean };
         setGh(st);
       } catch {
         setGh({ configured: false });
@@ -51,10 +47,7 @@ export default function LoginPage() {
   async function onSubmit() {
     setSubmitting(true);
     try {
-      await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
+      await apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
       toast.success("Logged in");
       router.replace("/projects");
     } catch (e: any) {
@@ -65,147 +58,88 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-hero-radial lg:flex-row">
-      {/* Decorative grid on the full surface (subtle) */}
-      <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
-
-      {/* Left: marketing panel (lg+) */}
-      <section className="relative hidden flex-1 flex-col justify-between px-12 py-10 lg:flex">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 transition-opacity hover:opacity-90"
-        >
-          <BrandLogo variant="full" size={24} />
-        </Link>
-
-        <div className="relative space-y-6">
-          <h2 className="max-w-[520px] text-4xl font-semibold leading-[1.1] tracking-tight text-white">
-            Ship from push to{" "}
-            <span className="text-brand-gradient">production</span>,
-            <br />
-            on infrastructure you own.
-          </h2>
-          <p className="max-w-[460px] text-[15px] leading-relaxed text-[#9b9b9b]">
-            OpenCel is an open-source, self-hosted deployment platform. Connect a
-            repo, get preview URLs on every pull request, promote to production,
-            and stream live build logs — all on your own VPS.
+    <main className="flex min-h-screen flex-col items-center justify-center px-4">
+      <div className="w-full max-w-[360px]">
+        {/* Logo */}
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <OpencelLogo size={32} className="text-white" />
+          <h1 className="text-[22px] font-semibold tracking-tight text-white">
+            Sign in to OpenCel
+          </h1>
+          <p className="text-sm text-[#888]">
+            Your self-hosted deployment platform.
           </p>
-
-          <ul className="space-y-2.5 text-sm text-[#c5c5c5]">
-            {[
-              "Build & deploy on every push or PR",
-              "Preview URLs per deployment",
-              "Encrypted environment variables",
-              "Docker Compose on your own host",
-            ].map((f) => (
-              <li key={f} className="flex items-center gap-2.5">
-                <span className="bg-brand-gradient inline-block h-1.5 w-1.5 rounded-full" />
-                {f}
-              </li>
-            ))}
-          </ul>
         </div>
 
-        <p className="text-xs text-[#666]">
-          © {new Date().getFullYear()} OpenCel · MIT License
-        </p>
-      </section>
+        <div className="space-y-4">
+          {/* GitHub OAuth */}
+          {gh?.configured && (
+            <>
+              <Button asChild variant="outline" className="h-11 w-full gap-2 border-[#333] bg-transparent text-[#ededed] hover:bg-[#111] hover:text-white">
+                <a href="/api/auth/github/start?return_to=/projects">
+                  <Github className="h-5 w-5" />
+                  Continue with GitHub
+                </a>
+              </Button>
 
-      {/* Right: login card */}
-      <section className="relative flex flex-1 items-center justify-center px-4 py-16">
-        <div className="w-full max-w-[380px]">
-          {/* Compact brand on mobile */}
-          <div className="mb-8 flex flex-col items-center gap-3 lg:hidden">
-            <BrandLogo variant="mark" size={30} />
-          </div>
-
-          <div className="mb-7 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-white">
-              Log in to OpenCel
-            </h1>
-            <p className="mt-1.5 text-sm text-[#888]">
-              Welcome back. Continue to your workspace.
-            </p>
-          </div>
-
-          <div className="space-y-4 rounded-xl border border-[#222] bg-[#0a0a0a]/80 p-6 backdrop-blur-xl">
-            {gh?.configured && (
-              <>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-11 w-full gap-2 border-[#2a2a2a] bg-transparent text-[#ededed] hover:border-[#444] hover:bg-[#111] hover:text-white"
-                >
-                  <a href="/api/auth/github/start?return_to=/projects">
-                    <Github className="h-5 w-5" />
-                    Continue with GitHub
-                  </a>
-                </Button>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-[#222]" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-[#0a0a0a] px-3 text-[#666]">
-                      or with email
-                    </span>
-                  </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-[#333]" />
                 </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-black px-3 text-[#666]">or</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Email / Password */}
+          <div className="space-y-2">
+            <label className="text-sm text-[#888]">Email Address</label>
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+              className="h-11 border-[#333] bg-black text-white placeholder:text-[#555] focus-visible:ring-white"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm text-[#888]">Password</label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Enter password"
+              className="h-11 border-[#333] bg-black text-white placeholder:text-[#555] focus-visible:ring-white"
+            />
+          </div>
+
+          <Button
+            className="h-11 w-full gap-2 font-medium"
+            onClick={onSubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="h-4 w-4" />
               </>
             )}
+          </Button>
 
-            <div className="space-y-2">
-              <label className="text-sm text-[#9b9b9b]">Email address</label>
-              <Input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                placeholder="you@example.com"
-                className="h-11 border-[#2a2a2a] bg-black text-white placeholder:text-[#555] focus-visible:ring-brand"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm text-[#9b9b9b]">Password</label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                placeholder="Enter password"
-                className="h-11 border-[#2a2a2a] bg-black text-white placeholder:text-[#555] focus-visible:ring-brand"
-              />
-            </div>
-
-            <Button
-              variant="brand"
-              className="h-11 w-full gap-2 font-medium"
-              onClick={onSubmit}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              ) : (
-                <>
-                  Continue
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </div>
-
-          <p className="mt-6 text-center text-[13px] text-[#666]">
+          <p className="text-center text-[13px] text-[#666]">
             First time?{" "}
-            <Link
-              href="/setup"
-              className="text-white underline-offset-4 hover:text-brand hover:underline"
-            >
+            <Link href="/setup" className="text-white underline underline-offset-4 hover:text-[#ededed]">
               Run initial setup
             </Link>
           </p>
         </div>
-      </section>
+      </div>
     </main>
   );
 }
