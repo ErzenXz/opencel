@@ -43,9 +43,19 @@ func (s *Server) provisionService(serviceID string) {
 	}
 	pw := ""
 	if len(sv.PasswordEnc) > 0 {
-		if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, sv.PasswordEnc); err == nil {
-			pw = string(v)
+		v, derr := envcrypt.Decrypt(s.Cfg.EncryptKey, sv.PasswordEnc)
+		if derr != nil {
+			_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "decrypt service password: "+derr.Error())
+			return
 		}
+		pw = string(v)
+	}
+	// An empty password would produce an unauthenticated Redis
+	// (`--requirepass ""`) and a crash-looping postgres/mysql/mongo that
+	// `docker run -d` reports as success. Fail loudly instead.
+	if pw == "" {
+		_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "service password is empty")
+		return
 	}
 	spec := provisionSpec{
 		ServiceID:    sv.ID,
