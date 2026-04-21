@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -267,11 +268,14 @@ func (s *Store) DeleteNode(ctx context.Context, id string) error {
 }
 
 func (s *Store) MarkStaleNodesOffline(ctx context.Context, olderThan time.Duration) error {
+	// Postgres ::interval can't parse Go's duration format (e.g. "2m0s"); format
+	// as seconds so any duration serializes to a valid interval literal.
+	interval := fmt.Sprintf("%d seconds", int(olderThan.Seconds()))
 	_, err := s.DB.ExecContext(ctx, `
 		UPDATE nodes
 		SET status = 'offline'
 		WHERE status = 'online' AND (last_seen_at IS NULL OR last_seen_at < now() - $1::interval)
-	`, olderThan.String())
+	`, interval)
 	return err
 }
 

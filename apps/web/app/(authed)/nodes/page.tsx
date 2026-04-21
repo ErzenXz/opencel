@@ -75,13 +75,13 @@ export default function NodesPage() {
   } | null>(null);
   const orgID = useMemo(() => getStoredOrgID(), []);
 
-  async function refresh() {
+  async function refresh({ silent = false }: { silent?: boolean } = {}) {
     if (!orgID) {
       setNodes([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [ns, ls] = await Promise.all([
         apiFetch(`/api/orgs/${orgID}/nodes`) as Promise<Node[]>,
@@ -90,15 +90,15 @@ export default function NodesPage() {
       setNodes(ns || []);
       setLocations(ls || []);
     } catch (e) {
-      toast.error(`Failed to load nodes: ${(e as Error).message}`);
+      if (!silent) toast.error(`Failed to load nodes: ${(e as Error).message}`);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 15000);
+    const t = setInterval(() => refresh({ silent: true }), 15000);
     return () => clearInterval(t);
   }, [orgID]);
 

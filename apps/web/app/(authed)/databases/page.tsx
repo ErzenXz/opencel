@@ -101,13 +101,13 @@ export default function DatabasesPage() {
   const [conn, setConn] = useState<Record<string, { uri?: string; password?: string }>>({});
   const orgID = useMemo(() => getStoredOrgID(), []);
 
-  async function refresh() {
+  async function refresh({ silent = false }: { silent?: boolean } = {}) {
     if (!orgID) {
       setServices([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [svs, ls] = await Promise.all([
         apiFetch(`/api/orgs/${orgID}/services`) as Promise<Service[]>,
@@ -116,15 +116,15 @@ export default function DatabasesPage() {
       setServices(svs || []);
       setLocations(ls || []);
     } catch (e) {
-      toast.error(`Failed to load: ${(e as Error).message}`);
+      if (!silent) toast.error(`Failed to load: ${(e as Error).message}`);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 5000);
+    const t = setInterval(() => refresh({ silent: true }), 5000);
     return () => clearInterval(t);
   }, [orgID]);
 
