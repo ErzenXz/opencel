@@ -80,7 +80,7 @@ type provisionSpec struct {
 // runLocalProvision runs a docker container on the local host.
 func runLocalProvision(ctx context.Context, spec provisionSpec) (db.ServiceRunningInfo, error) {
 	container := containerNameForService(spec.Name)
-	image, env, port, err := imageAndEnvFor(spec)
+	image, env, cmdArgs, port, err := imageAndEnvFor(spec)
 	if err != nil {
 		return db.ServiceRunningInfo{}, err
 	}
@@ -95,6 +95,7 @@ func runLocalProvision(ctx context.Context, spec provisionSpec) (db.ServiceRunni
 		args = append(args, "-e", e)
 	}
 	args = append(args, image)
+	args = append(args, cmdArgs...)
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -157,7 +158,11 @@ func containerNameForService(name string) string {
 	return "opencel-svc-" + out
 }
 
-func imageAndEnvFor(spec provisionSpec) (image string, env []string, port int, err error) {
+// imageAndEnvFor returns the docker image, env vars, extra command args to
+// append after the image, and the service's default port. Redis uses
+// command args (not env) because the official redis image only honors
+// `--requirepass` when passed as a command argument.
+func imageAndEnvFor(spec provisionSpec) (image string, env []string, cmdArgs []string, port int, err error) {
 	switch spec.Kind {
 	case "postgres":
 		image = fmt.Sprintf("postgres:%s", defaultIfEmpty(spec.Version, "16"))
@@ -169,12 +174,7 @@ func imageAndEnvFor(spec provisionSpec) (image string, env []string, port int, e
 		port = 5432
 	case "redis":
 		image = fmt.Sprintf("redis:%s", defaultIfEmpty(spec.Version, "7"))
-		// Redis is configured via command args — pass auth via entrypoint env not supported without
-		// a custom entrypoint. We set requirepass through a command override by using `redis-server
-		// --requirepass`. This helper uses docker's ability to pass extra args after the image.
-		// We express that by returning a sentinel env that the caller translates. For simplicity,
-		// we set via REDIS_ARGS consumed by the bitnami image fallback and pass it anyway.
-		env = []string{"REDIS_ARGS=--requirepass " + spec.Password}
+		cmdArgs = []string{"redis-server", "--requirepass", spec.Password}
 		port = 6379
 	case "mysql":
 		image = fmt.Sprintf("mysql:%s", defaultIfEmpty(spec.Version, "8"))

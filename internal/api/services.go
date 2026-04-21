@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -333,11 +334,15 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, herr.status, map[string]any{"error": herr.msg})
 		return
 	}
-	// Mark deleting and destroy the container (best-effort).
+	// Mark deleting and destroy the container (best-effort). The goroutine uses
+	// an independent context so it survives the handler returning.
 	_ = s.Store.UpdateServiceStatus(r.Context(), id, "deleting", "")
+	containerName := sv.ContainerName.String
 	go func() {
-		_ = removeServiceContainer(sv.ContainerName.String)
-		_ = s.Store.DeleteService(r.Context(), id)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		_ = removeServiceContainer(containerName)
+		_ = s.Store.DeleteService(ctx, id)
 	}()
 	writeJSON(w, 200, map[string]any{"ok": true})
 }

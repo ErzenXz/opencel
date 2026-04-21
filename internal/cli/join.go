@@ -246,7 +246,7 @@ func runAgent(ctx context.Context, cfg *nodeConfig) error {
 func agentProvision(ctx context.Context, in provisionSpecIn) (provisionSpecOut, error) {
 	container := "opencel-svc-" + sanitizeContainer(in.Name)
 	_ = exec.CommandContext(ctx, "docker", "rm", "-f", container).Run()
-	image, env, port, err := agentImageFor(in)
+	image, env, cmdArgs, port, err := agentImageFor(in)
 	if err != nil {
 		return provisionSpecOut{}, err
 	}
@@ -258,6 +258,7 @@ func agentProvision(ctx context.Context, in provisionSpecIn) (provisionSpecOut, 
 		args = append(args, "-e", e)
 	}
 	args = append(args, image)
+	args = append(args, cmdArgs...)
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stderr = &stderr
@@ -285,7 +286,7 @@ func sanitizeContainer(s string) string {
 	return out
 }
 
-func agentImageFor(in provisionSpecIn) (image string, env []string, port int, err error) {
+func agentImageFor(in provisionSpecIn) (image string, env []string, cmdArgs []string, port int, err error) {
 	def := func(v, d string) string {
 		if strings.TrimSpace(v) == "" {
 			return d
@@ -303,7 +304,7 @@ func agentImageFor(in provisionSpecIn) (image string, env []string, port int, er
 		port = 5432
 	case "redis":
 		image = "redis:" + def(in.Version, "7")
-		env = []string{"REDIS_ARGS=--requirepass " + in.Password}
+		cmdArgs = []string{"redis-server", "--requirepass", in.Password}
 		port = 6379
 	case "mysql":
 		image = "mysql:" + def(in.Version, "8")
