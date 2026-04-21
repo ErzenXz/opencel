@@ -369,24 +369,40 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		// docker for the primary, a signed HTTP call to the agent for
 		// workers. Otherwise the DB row vanishes but the container keeps
 		// running on the worker forever.
+		var remErr error
 		if nodeID != "" {
 			if n, err := s.Store.GetNode(ctx, nodeID); err == nil && n != nil {
 				if n.Role != "primary" && n.AgentURL.String != "" {
 					var agentToken string
 					if len(n.TokenEnc) > 0 {
-						if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); err == nil {
+						if v, derr := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); derr == nil {
 							agentToken = string(v)
+						} else {
+							remErr = fmt.Errorf("decrypt agent token: %w", derr)
 						}
 					}
-					_ = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, containerName)
+					if remErr == nil {
+						remErr = removeServiceContainerRemote(ctx, n.AgentURL.String, agentToken, containerName)
+					}
 				} else {
-					_ = removeServiceContainer(containerName)
+					remErr = removeServiceContainer(containerName)
 				}
+			} else if err != nil {
+				remErr = err
 			} else {
-				_ = removeServiceContainer(containerName)
+				// Node vanished (e.g. deleted concurrently); nothing we can
+				// sensibly do — drop the DB row so the service doesn't
+				// linger in 'deleting' forever.
+				remErr = nil
 			}
 		} else {
-			_ = removeServiceContainer(containerName)
+			remErr = removeServiceContainer(containerName)
+		}
+		if remErr != nil {
+			// Don't drop the row — leaving the record lets an admin retry
+			// or intervene manually; deleting would orphan a live container.
+			_ = s.Store.UpdateServiceStatus(ctx, id, "failed", fmt.Sprintf("delete failed: %s", remErr.Error()))
+			return
 		}
 		_ = s.Store.DeleteService(ctx, id)
 	}()

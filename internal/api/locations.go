@@ -40,7 +40,7 @@ func toLocationResp(l db.Location, nodeCount int) locationResp {
 	}
 }
 
-var locationSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}$`)
+var locationSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 
 func slugifyLocation(in string) string {
 	s := strings.ToLower(strings.TrimSpace(in))
