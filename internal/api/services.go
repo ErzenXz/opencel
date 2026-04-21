@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -175,6 +176,12 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) {
 		chosen = &tmp
 		break
 	}
+	// If the caller explicitly requested a node and we didn't find it in this
+	// org, that's a bad request — don't silently place the service elsewhere.
+	if chosen == nil && strings.TrimSpace(req.NodeID) != "" {
+		writeJSON(w, 400, map[string]any{"error": "node_id not found in this org"})
+		return
+	}
 	// Fall back to any online node if none matched; fall back to the primary.
 	if chosen == nil {
 		for _, n := range nodes {
@@ -235,7 +242,10 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) {
 	}
 	// Kick off provisioning asynchronously; best-effort. If no node available, surface as failed.
 	if chosen == nil {
-		_ = s.Store.UpdateServiceStatus(r.Context(), sv.ID, "failed", "no node available to provision on")
+		const msg = "no node available to provision on"
+		_ = s.Store.UpdateServiceStatus(r.Context(), sv.ID, "failed", msg)
+		sv.Status = "failed"
+		sv.ErrorMessage = sql.NullString{String: msg, Valid: true}
 	} else {
 		go s.provisionService(sv.ID)
 	}

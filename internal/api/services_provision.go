@@ -57,7 +57,18 @@ func (s *Server) provisionService(serviceID string) {
 	if n.Role == "primary" || n.AgentURL.String == "" {
 		info, provErr = runLocalProvision(ctx, spec)
 	} else {
-		info, provErr = runRemoteProvision(ctx, n.AgentURL.String, spec)
+		// Decrypt the node's registration token so we can authenticate to its agent.
+		var agentToken string
+		if len(n.TokenEnc) > 0 {
+			if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); err == nil {
+				agentToken = string(v)
+			}
+		}
+		if agentToken == "" {
+			_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "missing agent token; re-create the node")
+			return
+		}
+		info, provErr = runRemoteProvision(ctx, n.AgentURL.String, agentToken, spec)
 	}
 	if provErr != nil {
 		_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", provErr.Error())
@@ -79,7 +90,7 @@ type provisionSpec struct {
 
 // runLocalProvision runs a docker container on the local host.
 func runLocalProvision(ctx context.Context, spec provisionSpec) (db.ServiceRunningInfo, error) {
-	container := containerNameForService(spec.Name)
+	container := containerNameForService(spec.ServiceID, spec.Name)
 	image, env, cmdArgs, port, err := imageAndEnvFor(spec)
 	if err != nil {
 		return db.ServiceRunningInfo{}, err
@@ -109,14 +120,17 @@ func runLocalProvision(ctx context.Context, spec provisionSpec) (db.ServiceRunni
 	}, nil
 }
 
-// runRemoteProvision asks a worker node's agent to run a container.
-func runRemoteProvision(ctx context.Context, agentURL string, spec provisionSpec) (db.ServiceRunningInfo, error) {
+// runRemoteProvision asks a worker node's agent to run a container. It
+// authenticates with the node's registration token so arbitrary callers
+// cannot drive the agent's docker backend.
+func runRemoteProvision(ctx context.Context, agentURL, agentToken string, spec provisionSpec) (db.ServiceRunningInfo, error) {
 	body, _ := json.Marshal(spec)
 	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(agentURL, "/")+"/agent/services", bytes.NewReader(body))
 	if err != nil {
 		return db.ServiceRunningInfo{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+agentToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return db.ServiceRunningInfo{}, err
@@ -140,7 +154,10 @@ func runRemoteProvision(ctx context.Context, agentURL string, spec provisionSpec
 	}, nil
 }
 
-func containerNameForService(name string) string {
+// containerNameForService produces a stable, globally-unique container name. The
+// DB uniqueness on services is (org_id, name), so we must include the service id
+// (a UUID) to avoid collisions across orgs when they land on the same host.
+func containerNameForService(serviceID, name string) string {
 	s := strings.ToLower(strings.TrimSpace(name))
 	var b strings.Builder
 	for _, r := range s {
@@ -151,11 +168,18 @@ func containerNameForService(name string) string {
 			b.WriteRune('-')
 		}
 	}
-	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		out = "svc"
+	slug := strings.Trim(b.String(), "-")
+	if slug == "" {
+		slug = "svc"
 	}
-	return "opencel-svc-" + out
+	short := strings.ReplaceAll(serviceID, "-", "")
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	if short == "" {
+		return "opencel-svc-" + slug
+	}
+	return "opencel-svc-" + short + "-" + slug
 }
 
 // imageAndEnvFor returns the docker image, env vars, extra command args to

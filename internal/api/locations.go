@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opencel/opencel/internal/crypto/envcrypt"
 	"github.com/opencel/opencel/internal/db"
 )
 
@@ -291,6 +292,13 @@ func (s *Server) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})
 		return
 	}
+	// Store an encrypted copy of the token so the control plane can authenticate
+	// outbound requests to the node's agent (the DB only has the hash otherwise).
+	tokEnc, err := envcrypt.Encrypt(s.Cfg.EncryptKey, []byte(tok))
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": err.Error()})
+		return
+	}
 	n, err := s.Store.CreateNode(r.Context(), db.CreateNodeParams{
 		OrgID:       orgID,
 		LocationID:  strings.TrimSpace(req.LocationID),
@@ -298,6 +306,7 @@ func (s *Server) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		Role:        "worker",
 		TokenPrefix: prefix,
 		TokenHash:   hash,
+		TokenEnc:    tokEnc,
 	})
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"error": err.Error()})

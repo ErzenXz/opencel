@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,12 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+// subtleCompare wraps crypto/subtle.ConstantTimeCompare so auth checks run in
+// constant time regardless of where the mismatch is.
+func subtleCompare(a, b string) int {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b))
+}
 
 // Config file persisted on secondary nodes after `opencel join`.
 type nodeConfig struct {
@@ -201,6 +208,15 @@ func runAgent(ctx context.Context, cfg *nodeConfig) error {
 			http.Error(w, "method", 405)
 			return
 		}
+		// Require the node's registration token. Without this the agent is an
+		// unauthenticated `docker run` executor for anyone who can reach the
+		// listen port.
+		authz := r.Header.Get("Authorization")
+		const pfx = "Bearer "
+		if !strings.HasPrefix(authz, pfx) || subtleCompare(strings.TrimPrefix(authz, pfx), cfg.Token) != 1 {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
 		var in provisionSpecIn
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, "bad json", 400)
@@ -244,7 +260,7 @@ func runAgent(ctx context.Context, cfg *nodeConfig) error {
 }
 
 func agentProvision(ctx context.Context, in provisionSpecIn) (provisionSpecOut, error) {
-	container := "opencel-svc-" + sanitizeContainer(in.Name)
+	container := agentContainerName(in.ServiceID, in.Name)
 	_ = exec.CommandContext(ctx, "docker", "rm", "-f", container).Run()
 	image, env, cmdArgs, port, err := agentImageFor(in)
 	if err != nil {
@@ -268,8 +284,11 @@ func agentProvision(ctx context.Context, in provisionSpecIn) (provisionSpecOut, 
 	return provisionSpecOut{ContainerName: container, InternalHost: container, InternalPort: port}, nil
 }
 
-func sanitizeContainer(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
+// agentContainerName mirrors containerNameForService on the control plane.
+// Include the service id so two orgs with services named "redis" don't
+// clobber each other if they share a host.
+func agentContainerName(serviceID, name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
 	var b strings.Builder
 	for _, r := range s {
 		switch {
@@ -279,11 +298,18 @@ func sanitizeContainer(s string) string {
 			b.WriteRune('-')
 		}
 	}
-	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		return "svc"
+	slug := strings.Trim(b.String(), "-")
+	if slug == "" {
+		slug = "svc"
 	}
-	return out
+	short := strings.ReplaceAll(serviceID, "-", "")
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	if short == "" {
+		return "opencel-svc-" + slug
+	}
+	return "opencel-svc-" + short + "-" + slug
 }
 
 func agentImageFor(in provisionSpecIn) (image string, env []string, cmdArgs []string, port int, err error) {

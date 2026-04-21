@@ -27,6 +27,7 @@ type Node struct {
 	AgentURL        sql.NullString
 	TokenPrefix     sql.NullString
 	TokenHash       string
+	TokenEnc        []byte
 	Hostname        sql.NullString
 	AgentVersion    sql.NullString
 	CPUCores        sql.NullInt64
@@ -126,6 +127,7 @@ type CreateNodeParams struct {
 	Role        string
 	TokenPrefix string
 	TokenHash   string
+	TokenEnc    []byte
 }
 
 func (s *Store) CreateNode(ctx context.Context, p CreateNodeParams) (*Node, error) {
@@ -135,12 +137,12 @@ func (s *Store) CreateNode(ctx context.Context, p CreateNodeParams) (*Node, erro
 	}
 	var n Node
 	err := s.DB.QueryRowContext(ctx, `
-		INSERT INTO nodes (org_id, location_id, name, role, token_prefix, token_hash)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash,
+		INSERT INTO nodes (org_id, location_id, name, role, token_prefix, token_hash, token_enc)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash, token_enc,
 		          hostname, agent_version, cpu_cores, memory_bytes, last_seen_at, last_metrics_json, created_at
-	`, p.OrgID, locID, p.Name, p.Role, p.TokenPrefix, p.TokenHash).Scan(
-		&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash,
+	`, p.OrgID, locID, p.Name, p.Role, p.TokenPrefix, p.TokenHash, p.TokenEnc).Scan(
+		&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash, &n.TokenEnc,
 		&n.Hostname, &n.AgentVersion, &n.CPUCores, &n.MemoryBytes, &n.LastSeenAt, &n.LastMetricsJSON, &n.CreatedAt,
 	)
 	if err != nil {
@@ -151,7 +153,7 @@ func (s *Store) CreateNode(ctx context.Context, p CreateNodeParams) (*Node, erro
 
 func (s *Store) ListNodesByOrg(ctx context.Context, orgID string) ([]Node, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash,
+		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash, token_enc,
 		       hostname, agent_version, cpu_cores, memory_bytes, last_seen_at, last_metrics_json, created_at
 		FROM nodes
 		WHERE org_id = $1
@@ -164,7 +166,7 @@ func (s *Store) ListNodesByOrg(ctx context.Context, orgID string) ([]Node, error
 	var out []Node
 	for rows.Next() {
 		var n Node
-		if err := rows.Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash,
+		if err := rows.Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash, &n.TokenEnc,
 			&n.Hostname, &n.AgentVersion, &n.CPUCores, &n.MemoryBytes, &n.LastSeenAt, &n.LastMetricsJSON, &n.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -175,7 +177,7 @@ func (s *Store) ListNodesByOrg(ctx context.Context, orgID string) ([]Node, error
 
 func (s *Store) ListNodesByLocation(ctx context.Context, locationID string) ([]Node, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash,
+		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash, token_enc,
 		       hostname, agent_version, cpu_cores, memory_bytes, last_seen_at, last_metrics_json, created_at
 		FROM nodes
 		WHERE location_id = $1
@@ -188,7 +190,7 @@ func (s *Store) ListNodesByLocation(ctx context.Context, locationID string) ([]N
 	var out []Node
 	for rows.Next() {
 		var n Node
-		if err := rows.Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash,
+		if err := rows.Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash, &n.TokenEnc,
 			&n.Hostname, &n.AgentVersion, &n.CPUCores, &n.MemoryBytes, &n.LastSeenAt, &n.LastMetricsJSON, &n.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -200,10 +202,10 @@ func (s *Store) ListNodesByLocation(ctx context.Context, locationID string) ([]N
 func (s *Store) GetNode(ctx context.Context, id string) (*Node, error) {
 	var n Node
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash,
+		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash, token_enc,
 		       hostname, agent_version, cpu_cores, memory_bytes, last_seen_at, last_metrics_json, created_at
 		FROM nodes WHERE id = $1
-	`, id).Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash,
+	`, id).Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash, &n.TokenEnc,
 		&n.Hostname, &n.AgentVersion, &n.CPUCores, &n.MemoryBytes, &n.LastSeenAt, &n.LastMetricsJSON, &n.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -217,10 +219,10 @@ func (s *Store) GetNode(ctx context.Context, id string) (*Node, error) {
 func (s *Store) GetNodeByTokenHash(ctx context.Context, tokenHash string) (*Node, error) {
 	var n Node
 	err := s.DB.QueryRowContext(ctx, `
-		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash,
+		SELECT id, org_id, location_id, name, role, status, agent_url, token_prefix, token_hash, token_enc,
 		       hostname, agent_version, cpu_cores, memory_bytes, last_seen_at, last_metrics_json, created_at
 		FROM nodes WHERE token_hash = $1
-	`, tokenHash).Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash,
+	`, tokenHash).Scan(&n.ID, &n.OrgID, &n.LocationID, &n.Name, &n.Role, &n.Status, &n.AgentURL, &n.TokenPrefix, &n.TokenHash, &n.TokenEnc,
 		&n.Hostname, &n.AgentVersion, &n.CPUCores, &n.MemoryBytes, &n.LastSeenAt, &n.LastMetricsJSON, &n.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

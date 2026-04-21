@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   agent_url TEXT,
   token_prefix TEXT,
   token_hash TEXT NOT NULL,
+  token_enc BYTEA,
   hostname TEXT,
   agent_version TEXT,
   cpu_cores INT,
