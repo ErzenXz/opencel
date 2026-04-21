@@ -188,10 +188,12 @@ func newAutoUpdateStatusCmd() *cobra.Command {
 func quoteForSystemd(s string) string {
 	hasSpecial := strings.ContainsAny(s, " \t\"\\\n")
 	hasPercent := strings.Contains(s, "%")
-	if !hasSpecial && !hasPercent {
+	hasDollar := strings.Contains(s, "$")
+	if !hasSpecial && !hasPercent && !hasDollar {
 		return s
 	}
 	replaced := strings.ReplaceAll(s, `%`, `%%`)
+	replaced = strings.ReplaceAll(replaced, `$`, `$$`)
 	if !hasSpecial {
 		return replaced
 	}
