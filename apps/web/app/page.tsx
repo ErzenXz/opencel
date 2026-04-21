@@ -29,7 +29,7 @@ export default function IndexPage() {
   }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center">
+    <main className="flex min-h-screen items-center justify-center bg-black">
       <div className="flex items-center gap-3">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#333] border-t-white" />
         <span className="text-sm text-[#888]">Redirecting...</span>
