@@ -186,10 +186,16 @@ func newAutoUpdateStatusCmd() *cobra.Command {
 // Systemd splits on whitespace, so any argument containing whitespace or
 // special characters must be wrapped in double quotes with \ and " escaped.
 func quoteForSystemd(s string) string {
-	if !strings.ContainsAny(s, " \t\"\\\n") {
+	hasSpecial := strings.ContainsAny(s, " \t\"\\\n")
+	hasPercent := strings.Contains(s, "%")
+	if !hasSpecial && !hasPercent {
 		return s
 	}
-	replaced := strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`)
+	replaced := strings.ReplaceAll(s, `%`, `%%`)
+	if !hasSpecial {
+		return replaced
+	}
+	replaced = strings.ReplaceAll(strings.ReplaceAll(replaced, `\`, `\\`), `"`, `\"`)
 	return `"` + replaced + `"`
 }
 
