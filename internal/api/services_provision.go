@@ -84,9 +84,15 @@ func (s *Server) provisionService(serviceID string) {
 		// Decrypt the node's registration token so we can authenticate to its agent.
 		var agentToken string
 		if len(n.TokenEnc) > 0 {
-			if v, err := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc); err == nil {
-				agentToken = string(v)
+			v, derr := envcrypt.Decrypt(s.Cfg.EncryptKey, n.TokenEnc)
+			if derr != nil {
+				// Token is present but we can't read it — almost always an
+				// encrypt-key rotation. Surface the real cause instead of
+				// sending the admin to re-create a node whose token is fine.
+				_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "decrypt agent token: "+derr.Error())
+				return
 			}
+			agentToken = string(v)
 		}
 		if agentToken == "" {
 			_ = s.Store.UpdateServiceStatus(ctx, sv.ID, "failed", "missing agent token; re-create the node")
